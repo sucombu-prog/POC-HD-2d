@@ -17,6 +17,38 @@ const ASSETS = {
 
 type ViewMode = 'auto' | 'pc' | 'sp';
 
+const BACKDROP_WORLD_HEIGHT = 34;
+const BACKDROP_FALLBACK_ASPECT = 1578 / 997;
+
+function getViewportSize(mount: HTMLElement) {
+  const rect = mount.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  return {
+    width: Math.max(1, Math.round(rect.width || viewport?.width || window.innerWidth)),
+    height: Math.max(1, Math.round(rect.height || viewport?.height || window.innerHeight)),
+  };
+}
+
+function getCssViewportSize(mount: HTMLElement) {
+  const rect = mount.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  return {
+    width: Math.max(1, Math.round(rect.width || viewport?.width || window.innerWidth)),
+    height: Math.max(1, Math.round(rect.height || viewport?.height || window.innerHeight)),
+  };
+}
+
+function fitBackdropToTexture(backdrop: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>, texture: THREE.Texture) {
+  const image = texture.image as HTMLImageElement | undefined;
+  const width = image?.naturalWidth || image?.width || 0;
+  const height = image?.naturalHeight || image?.height || 0;
+  if (width <= 0 || height <= 0) return;
+
+  const nextGeometry = new THREE.PlaneGeometry(BACKDROP_WORLD_HEIGHT * (width / height), BACKDROP_WORLD_HEIGHT);
+  backdrop.geometry.dispose();
+  backdrop.geometry = nextGeometry;
+}
+
 const colorGradeShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -155,11 +187,13 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
 
   useEffect(() => {
     const mount = mountRef.current!;
+    const showDebug = new URLSearchParams(window.location.search).has('debug');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x081019);
     scene.fog = new THREE.FogExp2(0x0c1a28, 0.039);
 
-    const camera = new THREE.PerspectiveCamera(36, mount.clientWidth / mount.clientHeight, 0.1, 100);
+    const initialSize = getViewportSize(mount);
+    const camera = new THREE.PerspectiveCamera(36, initialSize.width / initialSize.height, 0.1, 100);
     camera.position.set(0, 7.6, 10.8);
     camera.lookAt(0, 0.4, -0.8);
     const cameraRig = {
@@ -178,24 +212,25 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(mount.clientWidth, mount.clientHeight, false);
+    renderer.setSize(initialSize.width, initialSize.height, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     mount.appendChild(renderer.domElement);
+    renderer.domElement.dataset.debugCanvas = 'true';
 
     const loader = new THREE.TextureLoader();
     const floorTexture = loader.load(ASSETS.floor);
     floorTexture.colorSpace = THREE.SRGBColorSpace;
     floorTexture.wrapS = THREE.RepeatWrapping;
     floorTexture.wrapT = THREE.RepeatWrapping;
-    floorTexture.repeat.set(1.25, 1.25);
+    floorTexture.repeat.set(4.6, 3.1);
     floorTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(18, 18, 96, 96),
+      new THREE.PlaneGeometry(96, 64, 160, 120),
       new THREE.MeshStandardMaterial({
         map: floorTexture,
         roughness: 0.82,
@@ -208,17 +243,20 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
     floor.receiveShadow = true;
     scene.add(floor);
 
-    const backdropTexture = loader.load(ASSETS.backdrop);
+    let backdrop: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+    const backdropTexture = loader.load(ASSETS.backdrop, (texture) => {
+      fitBackdropToTexture(backdrop, texture);
+    });
     backdropTexture.colorSpace = THREE.SRGBColorSpace;
-    const backdrop = new THREE.Mesh(
-      new THREE.PlaneGeometry(26, 15.2),
+    backdrop = new THREE.Mesh(
+      new THREE.PlaneGeometry(BACKDROP_WORLD_HEIGHT * BACKDROP_FALLBACK_ASPECT, BACKDROP_WORLD_HEIGHT),
       new THREE.MeshBasicMaterial({ map: backdropTexture, transparent: true }),
     );
     backdrop.position.set(0, 4.9, -8.4);
     scene.add(backdrop);
 
     const backMist = new THREE.Mesh(
-      new THREE.PlaneGeometry(28, 12),
+      new THREE.PlaneGeometry(136, 24),
       new THREE.MeshBasicMaterial({ color: 0x80bedf, transparent: true, opacity: 0.09, depthWrite: false }),
     );
     backMist.position.set(0, 4.2, -7.8);
@@ -391,7 +429,7 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(mount.clientWidth, mount.clientHeight), 0.52, 0.46, 0.14);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(initialSize.width, initialSize.height), 0.52, 0.46, 0.14);
     const bokehPass = new BokehPass(scene, camera, { focus: 13.8, aperture: 0.00026, maxblur: 0.002 });
     const gradePass = new ShaderPass(colorGradeShader);
     composer.addPass(bloomPass);
@@ -455,16 +493,15 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
     animate();
 
     const resize = () => {
-      const width = mount.clientWidth;
-      const height = mount.clientHeight;
+      const { width, height } = getViewportSize(mount);
       if (width <= 0 || height <= 0) return;
       const aspect = width / height;
       const autoProfile = width <= 760 || aspect < 0.86 ? 'sp' : 'pc';
       const profile = viewMode === 'auto' ? autoProfile : viewMode;
       const isPhone = profile === 'sp';
-      cameraRig.fov = isPhone ? (aspect < 0.75 ? 72 : 62) : Math.min(54, Math.max(42, 48 / Math.sqrt(aspect)));
+      cameraRig.fov = isPhone ? (aspect < 0.75 ? 72 : 62) : Math.min(46, Math.max(30, 42 / Math.sqrt(aspect)));
       cameraRig.y = isPhone ? 8.35 : 8.35;
-      cameraRig.z = isPhone ? (aspect < 0.75 ? 14.2 : 13.5) : 12.1;
+      cameraRig.z = isPhone ? (aspect < 0.75 ? 14.2 : 13.5) : 10.8;
       cameraRig.targetY = isPhone ? 1.05 : 1.25;
       cameraRig.targetZ = isPhone ? -2.2 : -2.25;
       layoutRig.heroX = isPhone ? -1.42 : -2.25;
@@ -487,7 +524,28 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
       particleMaterial.size = isPhone ? 0.024 : 0.034;
       particleMaterial.opacity = isPhone ? 0.3 : 0.5;
       renderer.setSize(width, height, false);
+      renderer.setViewport(0, 0, width, height);
+      renderer.setScissorTest(false);
       composer.setSize(width, height);
+
+      if (showDebug) {
+        const mountRect = mount.getBoundingClientRect();
+        const canvasRect = renderer.domElement.getBoundingClientRect();
+        const rendererSize = renderer.getSize(new THREE.Vector2());
+        const cssSize = getCssViewportSize(mount);
+        mount.dataset.debug = [
+          `css viewport ${window.innerWidth}x${window.innerHeight} dpr ${window.devicePixelRatio}`,
+          `outer ${window.outerWidth}x${window.outerHeight}`,
+          `screen ${window.screen.width}x${window.screen.height}`,
+          `css measured ${cssSize.width}x${cssSize.height}`,
+          `mount ${Math.round(mountRect.width)}x${Math.round(mountRect.height)}`,
+          `canvas css ${Math.round(canvasRect.width)}x${Math.round(canvasRect.height)}`,
+          `canvas buffer ${renderer.domElement.width}x${renderer.domElement.height}`,
+          `renderer ${Math.round(rendererSize.x)}x${Math.round(rendererSize.y)}`,
+          `used ${width}x${height}`,
+          `profile ${profile}`,
+        ].join(' / ');
+      }
     };
     resize();
     window.addEventListener('resize', resize);

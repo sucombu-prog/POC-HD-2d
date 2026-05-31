@@ -22,15 +22,27 @@ body {
 .scene {
   position: fixed;
   inset: 0;
-  width: 100dvw;
-  height: 100dvh;
-  min-width: 100vw;
-  min-height: 100vh;
   overflow: hidden;
   background:
     radial-gradient(circle at 45% 28%, rgba(88, 151, 180, 0.18), transparent 31%),
     radial-gradient(circle at 55% 78%, rgba(255, 177, 72, 0.08), transparent 26%),
     #070c12;
+}
+
+.scene[data-debug]::after {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 20;
+  max-width: calc(100vw - 16px);
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 210, 122, 0.45);
+  border-radius: 6px;
+  color: #fff8df;
+  background: rgba(0, 0, 0, 0.72);
+  content: attr(data-debug);
+  font: 700 11px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
 }
 
 canvas {
