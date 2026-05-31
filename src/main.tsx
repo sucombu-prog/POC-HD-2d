@@ -127,13 +127,20 @@ function makeBeamTexture() {
 function makeSlashTexture(layer = 0) {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
-  canvas.height = 512;
+  canvas.height = 1024;
   const ctx = canvas.getContext('2d')!;
-  ctx.translate(74, 392 + layer * 8);
-  ctx.rotate(-0.08 + layer * 0.018);
   ctx.lineCap = 'round';
 
-  const outer = ctx.createLinearGradient(0, 0, 930, -260);
+  const startX = 338 + layer * 30;
+  const startY = 88 + layer * 22;
+  const endX = 326 + layer * 32;
+  const endY = 930 - layer * 34;
+  const controlAX = 780 - layer * 36;
+  const controlAY = 118 + layer * 26;
+  const controlBX = 850 - layer * 24;
+  const controlBY = 750 - layer * 42;
+
+  const outer = ctx.createLinearGradient(300, 60, 760, 900);
   outer.addColorStop(0, 'rgba(92, 188, 255, 0)');
   outer.addColorStop(0.18, 'rgba(126, 220, 255, 0.2)');
   outer.addColorStop(0.48, layer === 1 ? 'rgba(255, 234, 154, 0.6)' : 'rgba(205, 244, 255, 0.56)');
@@ -141,37 +148,37 @@ function makeSlashTexture(layer = 0) {
   outer.addColorStop(1, 'rgba(92, 188, 255, 0)');
 
   ctx.strokeStyle = outer;
-  ctx.lineWidth = 112 - layer * 24;
+  ctx.lineWidth = 128 - layer * 28;
   ctx.beginPath();
-  ctx.moveTo(26 + layer * 24, 0);
-  ctx.bezierCurveTo(230, -225 - layer * 25, 590, -318 + layer * 9, 930 - layer * 48, -98 + layer * 20);
+  ctx.moveTo(startX, startY);
+  ctx.bezierCurveTo(controlAX, controlAY, controlBX, controlBY, endX, endY);
   ctx.stroke();
 
   ctx.globalCompositeOperation = 'destination-out';
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-  ctx.lineWidth = 70 - layer * 14;
+  ctx.lineWidth = 76 - layer * 16;
   ctx.beginPath();
-  ctx.moveTo(92 + layer * 24, -2);
-  ctx.bezierCurveTo(288, -160 - layer * 8, 590, -212 + layer * 14, 872 - layer * 58, -70 + layer * 16);
+  ctx.moveTo(startX - 38, startY + 28);
+  ctx.bezierCurveTo(controlAX - 116, controlAY + 72, controlBX - 112, controlBY - 74, endX - 34, endY - 20);
   ctx.stroke();
-  ctx.lineWidth = 30 - layer * 5;
+  ctx.lineWidth = 28 - layer * 5;
   ctx.beginPath();
-  ctx.moveTo(116 + layer * 22, 14);
-  ctx.bezierCurveTo(326, -88, 590, -130, 824 - layer * 54, -48 + layer * 12);
+  ctx.moveTo(startX - 68, startY + 56);
+  ctx.bezierCurveTo(controlAX - 186, controlAY + 134, controlBX - 188, controlBY - 150, endX - 70, endY - 44);
   ctx.stroke();
 
   ctx.globalCompositeOperation = 'source-over';
-  const core = ctx.createLinearGradient(40, 0, 900, -220);
+  const core = ctx.createLinearGradient(280, 60, 760, 900);
   core.addColorStop(0, 'rgba(255, 255, 255, 0)');
   core.addColorStop(0.32, 'rgba(227, 249, 255, 0.56)');
   core.addColorStop(0.54, 'rgba(255, 248, 203, 0.66)');
   core.addColorStop(0.78, 'rgba(210, 244, 255, 0.28)');
   core.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.strokeStyle = core;
-  ctx.lineWidth = 9 - layer * 1.8;
+  ctx.lineWidth = 11 - layer * 2;
   ctx.beginPath();
-  ctx.moveTo(64 + layer * 30, -4);
-  ctx.bezierCurveTo(250, -184 - layer * 8, 584, -250 + layer * 10, 890 - layer * 55, -88 + layer * 17);
+  ctx.moveTo(startX + 2, startY + 4);
+  ctx.bezierCurveTo(controlAX - 8, controlAY + 4, controlBX - 12, controlBY - 12, endX + 2, endY - 2);
   ctx.stroke();
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -204,8 +211,9 @@ function makeRevealMaterial(texture: THREE.Texture, tint: number) {
       varying vec2 vUv;
       void main() {
         vec4 texel = texture2D(map, vUv);
-        float head = 1.0 - smoothstep(revealHead, revealHead + 0.12, vUv.x);
-        float tail = smoothstep(revealTail - 0.12, revealTail, vUv.x);
+        float revealCoord = 1.0 - vUv.y;
+        float head = 1.0 - smoothstep(revealHead, revealHead + 0.12, revealCoord);
+        float tail = smoothstep(revealTail - 0.12, revealTail, revealCoord);
         float mask = clamp(head * tail, 0.0, 1.0);
         gl_FragColor = vec4(texel.rgb * tint, texel.a * opacity * mask);
       }
@@ -543,9 +551,9 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
 
     const slashTextures = [makeSlashTexture(0), makeSlashTexture(1), makeSlashTexture(2)];
     const slashLayers = [
-      { width: 4.35, height: 1.46, x: -0.05, y: 2.05, z: 0.78, rotate: -0.18, opacity: 0.72 },
-      { width: 3.55, height: 0.92, x: 0.28, y: 1.72, z: 0.8, rotate: -0.28, opacity: 0.46 },
-      { width: 2.95, height: 0.78, x: -0.48, y: 2.3, z: 0.82, rotate: -0.08, opacity: 0.34 },
+      { width: 4.4, height: 3.92, x: 1.05, y: 1.68, z: 0.78, rotate: -0.03, opacity: 0.78 },
+      { width: 3.9, height: 3.48, x: 1.14, y: 1.56, z: 0.8, rotate: -0.07, opacity: 0.48 },
+      { width: 4.0, height: 3.7, x: 0.92, y: 1.82, z: 0.82, rotate: 0.03, opacity: 0.36 },
     ];
     const slashArcs = slashTextures.map((texture, index) => {
       const layer = slashLayers[index];
@@ -601,6 +609,67 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       }),
     );
     scene.add(hitSparks);
+
+    const hitLineCount = 18;
+    const hitLinePositions = new Float32Array(hitLineCount * 2 * 3);
+    const hitLineSeeds = Array.from({ length: hitLineCount }, (_, index) => ({
+      angle: -Math.PI * 0.08 + (index / hitLineCount - 0.5) * Math.PI * 1.2 + (Math.random() - 0.5) * 0.28,
+      length: 0.22 + Math.random() * 0.42,
+      delay: index / hitLineCount * 0.28,
+      lift: -0.05 + Math.random() * 0.26,
+    }));
+    const hitLineGeometry = new THREE.BufferGeometry();
+    hitLineGeometry.setAttribute('position', new THREE.BufferAttribute(hitLinePositions, 3));
+    const hitLines = new THREE.LineSegments(
+      hitLineGeometry,
+      new THREE.LineBasicMaterial({
+        color: 0xfff6d7,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    );
+    scene.add(hitLines);
+
+    const hitNodeTexture = makeGlowTexture([
+      [0, 'rgba(255, 255, 245, 1)'],
+      [0.28, 'rgba(255, 208, 92, 0.62)'],
+      [1, 'rgba(255, 126, 40, 0)'],
+    ]);
+    const hitNodes = Array.from({ length: 7 }, (_, index) => {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: hitNodeTexture,
+          color: index % 2 === 0 ? 0xfff7d2 : 0xffb447,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          depthTest: false,
+        }),
+      );
+      scene.add(sprite);
+      return sprite;
+    });
+    const hitStreaks = Array.from({ length: 9 }, (_, index) => {
+      const streak = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.022, 0.5 + (index % 3) * 0.12),
+        new THREE.MeshBasicMaterial({
+          color: index % 2 === 0 ? 0xfff8df : 0xffb84c,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          depthTest: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      streak.rotation.z = -1.0 + index * 0.22;
+      scene.add(streak);
+      return streak;
+    });
 
     const slashSparkCount = 210;
     const slashSparkPositions = new Float32Array(slashSparkCount * 3);
@@ -694,14 +763,29 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       const p = windowProgress(progress, start, end);
       return p <= 0 || p >= 1 ? 0 : Math.sin(p * Math.PI);
     };
+    const sampleSlashArc = (along: number, drift = 0, lift = 0) => {
+      const scale = layoutRig.heroScale > 0.9 ? 1 : 0.76;
+      const anchorX = layoutRig.heroX + (layoutRig.heroScale > 0.9 ? 0.58 : 0.38);
+      const p = Math.min(1, Math.max(0, along));
+      const inv = 1 - p;
+      const texX = inv * inv * inv * 338 + 3 * inv * inv * p * 780 + 3 * inv * p * p * 850 + p * p * p * 326;
+      const texY = inv * inv * inv * 88 + 3 * inv * inv * p * 118 + 3 * inv * p * p * 750 + p * p * p * 930;
+      const planeWidth = 4.4 * scale;
+      const planeHeight = 3.92 * scale;
+      return {
+        x: anchorX + 1.05 * scale + (texX / 1024 - 0.5) * planeWidth + drift * 0.1,
+        y: 1.68 + (0.5 - texY / 1024) * planeHeight + drift * 0.16 + lift,
+        z: 0.78 + drift * 0.1,
+      };
+    };
 
     const animate = () => {
       const t = clock.getElapsedTime();
       raf = requestAnimationFrame(animate);
       const combatCycle = battleMode === 'slash' ? forcedBattlePhase ?? (t % 3.05) / 3.05 : 0;
-      const slashBurst = pulseWindow(combatCycle, 0.28, 0.72);
-      const slashDraw = easeOutCubic(windowProgress(combatCycle, 0.26, 0.54));
-      const slashFade = 1 - easeOutCubic(windowProgress(combatCycle, 0.56, 0.82));
+      const slashBurst = pulseWindow(combatCycle, 0.32, 0.62);
+      const slashDraw = easeOutCubic(windowProgress(combatCycle, 0.32, 0.42));
+      const slashFade = 1 - easeOutCubic(windowProgress(combatCycle, 0.56, 0.66));
       const hitBurst = pulseWindow(combatCycle, 0.47, 0.77);
       const smokeBurst = pulseWindow(combatCycle, 0.18, 0.92);
       const windBurst = pulseWindow(combatCycle, 0.24, 0.86);
@@ -758,17 +842,18 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         patch.material.opacity = 0.16 + Math.sin(t * 0.75 + i) * 0.035;
       });
 
-      const slashCenterX = (layoutRig.heroX + layoutRig.enemyX) * 0.5 - (layoutRig.heroScale > 0.9 ? 0.1 : 0.02);
+      const slashCenterX = layoutRig.heroX + (layoutRig.heroScale > 0.9 ? 0.58 : 0.38);
       slashArcs.forEach((arc, i) => {
         const layer = slashLayers[i];
-        const layerDelay = i * 0.045;
-        const draw = easeOutCubic(windowProgress(combatCycle, 0.26 + layerDelay, 0.56 + layerDelay));
-        const fade = 1 - easeOutCubic(windowProgress(combatCycle, 0.57 + layerDelay, 0.84 + layerDelay));
+        const layerDelay = i * 0.01;
+        const draw = easeOutCubic(windowProgress(combatCycle, 0.32 + layerDelay, 0.42 + layerDelay));
+        const wipe = easeOutCubic(windowProgress(combatCycle, 0.47 + layerDelay, 0.62 + layerDelay));
+        const fade = 1 - easeOutCubic(windowProgress(combatCycle, 0.6 + layerDelay, 0.68 + layerDelay));
         const material = arc.material as THREE.ShaderMaterial;
         arc.position.set(slashCenterX + layer.x * layoutRig.heroScale, layer.y, layer.z);
         arc.scale.setScalar(layoutRig.heroScale > 0.9 ? 1 : 0.76);
-        material.uniforms.revealHead.value = Math.min(1.02, 0.08 + draw * 0.92);
-        material.uniforms.revealTail.value = Math.max(-0.08, draw - 0.7);
+        material.uniforms.revealHead.value = Math.min(1.04, -0.1 + draw * 1.14);
+        material.uniforms.revealTail.value = Math.max(-0.12, -0.12 + wipe * 1.2);
         material.uniforms.opacity.value = battleMode === 'slash' ? Math.max(0, fade) * layer.opacity : 0;
       });
 
@@ -782,32 +867,85 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       });
 
       const hitArr = hitGeometry.attributes.position.array as Float32Array;
+      const hitAge = windowProgress(combatCycle, 0.47, 0.77);
+      const hitOriginX = layoutRig.enemyX - 0.46;
+      const hitOriginY = 2.02;
+      const hitOriginZ = enemy.position.z + 0.16;
       for (let i = 0; i < hitSparkCount; i += 1) {
         const seed = hitSeeds[i];
-        const burstAge = windowProgress(combatCycle, 0.47, 0.77);
-        const distance = seed.radius + easeOutCubic(burstAge) * seed.speed;
-        hitArr[i * 3] = layoutRig.enemyX - 0.34 + Math.cos(seed.angle) * distance * 0.54;
-        hitArr[i * 3 + 1] = 1.9 + Math.sin(seed.angle) * distance * 0.34 + seed.lift * burstAge;
-        hitArr[i * 3 + 2] = enemy.position.z + 0.11 + Math.sin(seed.angle * 1.7) * distance * 0.12;
+        const distance = seed.radius + easeOutCubic(hitAge) * seed.speed;
+        hitArr[i * 3] = hitOriginX + Math.cos(seed.angle) * distance * 0.42;
+        hitArr[i * 3 + 1] = hitOriginY + Math.sin(seed.angle) * distance * 0.28 + seed.lift * hitAge;
+        hitArr[i * 3 + 2] = hitOriginZ + Math.sin(seed.angle * 1.7) * distance * 0.1;
       }
       hitGeometry.attributes.position.needsUpdate = true;
-      hitSparks.material.opacity = battleMode === 'slash' ? hitBurst * 0.95 : 0;
-      hitSparks.material.size = 0.036 + hitBurst * 0.046;
+      hitSparks.material.opacity = battleMode === 'slash' ? hitBurst * 0.5 : 0;
+      hitSparks.material.size = 0.028 + hitBurst * 0.034;
+
+      const hitLineArr = hitLineGeometry.attributes.position.array as Float32Array;
+      hitLineSeeds.forEach((seed, i) => {
+        const local = windowProgress(hitAge, seed.delay, seed.delay + 0.28);
+        const flash = local <= 0 || local >= 1 ? 0 : Math.sin(local * Math.PI);
+        const length = seed.length * (0.38 + easeOutCubic(local) * 0.92) * flash;
+        const spread = 0.12 + local * 0.34;
+        const baseX = hitOriginX + Math.cos(seed.angle) * spread * 0.34;
+        const baseY = hitOriginY + Math.sin(seed.angle) * spread * 0.26 + seed.lift * local;
+        const baseZ = hitOriginZ + Math.sin(seed.angle * 1.3) * 0.05;
+        const dx = Math.cos(seed.angle) * length;
+        const dy = Math.sin(seed.angle) * length * 0.62;
+        const offset = i * 6;
+        hitLineArr[offset] = baseX - dx * 0.28;
+        hitLineArr[offset + 1] = baseY - dy * 0.28;
+        hitLineArr[offset + 2] = baseZ;
+        hitLineArr[offset + 3] = baseX + dx;
+        hitLineArr[offset + 4] = baseY + dy;
+        hitLineArr[offset + 5] = baseZ + 0.01;
+      });
+      hitLineGeometry.attributes.position.needsUpdate = true;
+      hitLines.material.opacity = battleMode === 'slash' ? Math.min(1, hitBurst * 1.25) : 0;
+      hitNodes.forEach((node, i) => {
+        const local = windowProgress(hitAge, i * 0.045, 0.28 + i * 0.045);
+        const flash = local <= 0 || local >= 1 ? 0 : Math.sin(local * Math.PI);
+        const angle = -0.55 + i * 0.18;
+        const spread = 0.16 + i * 0.035 + local * 0.16;
+        node.position.set(
+          hitOriginX + Math.cos(angle) * spread,
+          hitOriginY + Math.sin(angle) * spread * 0.62 + (i % 3) * 0.08,
+          hitOriginZ + 0.02 + i * 0.004,
+        );
+        node.scale.setScalar((0.2 + i * 0.018 + flash * 0.22) * layoutRig.enemyScale);
+        node.material.opacity = battleMode === 'slash' ? flash * 0.66 : 0;
+      });
+      hitStreaks.forEach((streak, i) => {
+        const local = windowProgress(hitAge, i * 0.035, 0.2 + i * 0.035);
+        const flash = local <= 0 || local >= 1 ? 0 : Math.sin(local * Math.PI);
+        const angle = -0.95 + i * 0.22;
+        const spread = 0.08 + easeOutCubic(local) * 0.16;
+        streak.position.set(
+          hitOriginX + Math.cos(angle) * spread * 0.58,
+          hitOriginY + Math.sin(angle) * spread * 0.48 + (i % 2) * 0.07,
+          hitOriginZ + 0.04 + i * 0.006,
+        );
+        streak.rotation.z = angle + Math.PI / 2;
+        streak.scale.set(0.34 + flash * 0.22, 0.18 + flash * 0.34, 1);
+        streak.material.opacity = battleMode === 'slash' ? flash * (0.16 + (i % 3) * 0.04) : 0;
+      });
 
       const slashSparkArr = slashSparkGeometry.attributes.position.array as Float32Array;
-      const slashAge = windowProgress(combatCycle, 0.3, 0.68);
+      const slashAge = windowProgress(combatCycle, 0.32, 0.62);
+      const sparkHead = Math.min(1, 0.08 + slashDraw * 0.92);
+      const sparkTail = Math.max(0, sparkHead - 0.52 + windowProgress(combatCycle, 0.47, 0.62) * 0.9);
       for (let i = 0; i < slashSparkCount; i += 1) {
         const seed = slashSparkSeeds[i];
-        const along = Math.min(1, seed.along + slashAge * seed.speed);
-        const arcX = layoutRig.heroX + 0.52 + along * (layoutRig.enemyX - layoutRig.heroX - 0.42);
-        const arcY = 1.18 + Math.sin(along * Math.PI) * 1.18 + seed.drift * 0.72;
-        slashSparkArr[i * 3] = arcX;
-        slashSparkArr[i * 3 + 1] = arcY + seed.lift * slashAge;
-        slashSparkArr[i * 3 + 2] = 0.78 + (seed.drift * 0.16);
+        const along = sparkTail + seed.along * Math.max(0.04, sparkHead - sparkTail);
+        const point = sampleSlashArc(along, seed.drift, seed.lift * slashAge);
+        slashSparkArr[i * 3] = point.x;
+        slashSparkArr[i * 3 + 1] = point.y;
+        slashSparkArr[i * 3 + 2] = point.z;
       }
       slashSparkGeometry.attributes.position.needsUpdate = true;
-      slashSparks.material.opacity = battleMode === 'slash' ? slashBurst * 0.72 : 0;
-      slashSparks.material.size = 0.026 + slashBurst * 0.036;
+      slashSparks.material.opacity = battleMode === 'slash' ? slashBurst * 0.56 : 0;
+      slashSparks.material.size = 0.024 + slashBurst * 0.032;
 
       const smokeArr = smokeGeometry.attributes.position.array as Float32Array;
       const smokeAge = windowProgress(combatCycle, 0.18, 0.92);
@@ -902,7 +1040,7 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       composer.dispose();
       renderer.dispose();
       scene.traverse((object) => {
-        if (object instanceof THREE.Mesh || object instanceof THREE.Sprite || object instanceof THREE.Points) {
+        if (object instanceof THREE.Mesh || object instanceof THREE.Sprite || object instanceof THREE.Points || object instanceof THREE.LineSegments) {
           object.geometry?.dispose?.();
           const materials = Array.isArray(object.material) ? object.material : [object.material];
           materials.forEach((material) => material.dispose());
@@ -922,6 +1060,7 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         floorLightTexture,
         ...slashTextures,
         windTexture,
+        hitNodeTexture,
         smokeTexture,
       ].forEach((texture) => texture.dispose());
     };
