@@ -12,10 +12,12 @@ const ASSETS = {
   floor: 'assets/dungeon-floor.png',
   backdrop: 'assets/dungeon-backdrop.png',
   hero: 'assets/hero.png',
+  heroSlash: 'assets/hero-slash-sheet.png',
   enemy: 'assets/enemy.png',
 };
 
 type ViewMode = 'auto' | 'pc' | 'sp';
+type BattleMode = 'idle' | 'slash';
 
 const BACKDROP_WORLD_HEIGHT = 34;
 const BACKDROP_FALLBACK_ASPECT = 1578 / 997;
@@ -122,6 +124,132 @@ function makeBeamTexture() {
   return new THREE.CanvasTexture(canvas);
 }
 
+function makeSlashTexture(layer = 0) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(74, 392 + layer * 8);
+  ctx.rotate(-0.08 + layer * 0.018);
+  ctx.lineCap = 'round';
+
+  const outer = ctx.createLinearGradient(0, 0, 930, -260);
+  outer.addColorStop(0, 'rgba(92, 188, 255, 0)');
+  outer.addColorStop(0.18, 'rgba(126, 220, 255, 0.2)');
+  outer.addColorStop(0.48, layer === 1 ? 'rgba(255, 234, 154, 0.6)' : 'rgba(205, 244, 255, 0.56)');
+  outer.addColorStop(0.74, 'rgba(164, 226, 255, 0.28)');
+  outer.addColorStop(1, 'rgba(92, 188, 255, 0)');
+
+  ctx.strokeStyle = outer;
+  ctx.lineWidth = 112 - layer * 24;
+  ctx.beginPath();
+  ctx.moveTo(26 + layer * 24, 0);
+  ctx.bezierCurveTo(230, -225 - layer * 25, 590, -318 + layer * 9, 930 - layer * 48, -98 + layer * 20);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+  ctx.lineWidth = 70 - layer * 14;
+  ctx.beginPath();
+  ctx.moveTo(92 + layer * 24, -2);
+  ctx.bezierCurveTo(288, -160 - layer * 8, 590, -212 + layer * 14, 872 - layer * 58, -70 + layer * 16);
+  ctx.stroke();
+  ctx.lineWidth = 30 - layer * 5;
+  ctx.beginPath();
+  ctx.moveTo(116 + layer * 22, 14);
+  ctx.bezierCurveTo(326, -88, 590, -130, 824 - layer * 54, -48 + layer * 12);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'source-over';
+  const core = ctx.createLinearGradient(40, 0, 900, -220);
+  core.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  core.addColorStop(0.32, 'rgba(227, 249, 255, 0.56)');
+  core.addColorStop(0.54, 'rgba(255, 248, 203, 0.66)');
+  core.addColorStop(0.78, 'rgba(210, 244, 255, 0.28)');
+  core.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.strokeStyle = core;
+  ctx.lineWidth = 9 - layer * 1.8;
+  ctx.beginPath();
+  ctx.moveTo(64 + layer * 30, -4);
+  ctx.bezierCurveTo(250, -184 - layer * 8, 584, -250 + layer * 10, 890 - layer * 55, -88 + layer * 17);
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function makeRevealMaterial(texture: THREE.Texture, tint: number) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      map: { value: texture },
+      opacity: { value: 0 },
+      revealHead: { value: 0 },
+      revealTail: { value: 0 },
+      tint: { value: new THREE.Color(tint) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D map;
+      uniform float opacity;
+      uniform float revealHead;
+      uniform float revealTail;
+      uniform vec3 tint;
+      varying vec2 vUv;
+      void main() {
+        vec4 texel = texture2D(map, vUv);
+        float head = 1.0 - smoothstep(revealHead, revealHead + 0.12, vUv.x);
+        float tail = smoothstep(revealTail - 0.12, revealTail, vUv.x);
+        float mask = clamp(head * tail, 0.0, 1.0);
+        gl_FragColor = vec4(texel.rgb * tint, texel.a * opacity * mask);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+  });
+}
+
+function makeWindTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createLinearGradient(0, 0, 512, 0);
+  gradient.addColorStop(0, 'rgba(141, 216, 255, 0)');
+  gradient.addColorStop(0.34, 'rgba(172, 232, 255, 0.2)');
+  gradient.addColorStop(0.62, 'rgba(255, 235, 168, 0.26)');
+  gradient.addColorStop(1, 'rgba(141, 216, 255, 0)');
+  ctx.strokeStyle = gradient;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i += 1) {
+    ctx.lineWidth = 5 - i * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(28, 62 + i * 10);
+    ctx.bezierCurveTo(146, 18 + i * 11, 306, 116 - i * 13, 486, 46 + i * 4);
+    ctx.stroke();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function makeSmokeTexture() {
+  return makeGlowTexture([
+    [0, 'rgba(207, 218, 214, 0.34)'],
+    [0.34, 'rgba(158, 174, 170, 0.17)'],
+    [1, 'rgba(106, 120, 116, 0)'],
+  ]);
+}
+
 function makeBlobShadow() {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -182,12 +310,14 @@ function makeSilhouetteShadowTexture(src: string) {
   return texture;
 }
 
-function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
+function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode: BattleMode }) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mount = mountRef.current!;
-    const showDebug = new URLSearchParams(window.location.search).has('debug');
+    const params = new URLSearchParams(window.location.search);
+    const showDebug = params.has('debug');
+    const forcedBattlePhase = params.has('phase') ? Math.min(1, Math.max(0, Number(params.get('phase')) || 0)) : null;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x081019);
     scene.fog = new THREE.FogExp2(0x0c1a28, 0.039);
@@ -288,11 +418,17 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
     scene.add(enemyRim);
 
     const heroTexture = loader.load(ASSETS.hero);
+    const heroSlashTexture = loader.load(ASSETS.heroSlash);
     const enemyTexture = loader.load(ASSETS.enemy);
     heroTexture.colorSpace = THREE.SRGBColorSpace;
+    heroSlashTexture.colorSpace = THREE.SRGBColorSpace;
     enemyTexture.colorSpace = THREE.SRGBColorSpace;
     heroTexture.magFilter = THREE.NearestFilter;
+    heroSlashTexture.magFilter = THREE.NearestFilter;
     enemyTexture.magFilter = THREE.NearestFilter;
+    heroSlashTexture.wrapS = THREE.RepeatWrapping;
+    heroSlashTexture.wrapT = THREE.RepeatWrapping;
+    heroSlashTexture.repeat.set(1 / 4, 1);
 
     const hero = new THREE.Sprite(new THREE.SpriteMaterial({ map: heroTexture, color: 0xffffff, transparent: true, alphaTest: 0.08 }));
     hero.position.set(-2.25, 1.28, 0.5);
@@ -405,6 +541,116 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
       return beam;
     });
 
+    const slashTextures = [makeSlashTexture(0), makeSlashTexture(1), makeSlashTexture(2)];
+    const slashLayers = [
+      { width: 4.35, height: 1.46, x: -0.05, y: 2.05, z: 0.78, rotate: -0.18, opacity: 0.72 },
+      { width: 3.55, height: 0.92, x: 0.28, y: 1.72, z: 0.8, rotate: -0.28, opacity: 0.46 },
+      { width: 2.95, height: 0.78, x: -0.48, y: 2.3, z: 0.82, rotate: -0.08, opacity: 0.34 },
+    ];
+    const slashArcs = slashTextures.map((texture, index) => {
+      const layer = slashLayers[index];
+      const material = makeRevealMaterial(texture, index === 1 ? 0xfff2bd : 0xcdf4ff);
+      const arc = new THREE.Mesh(new THREE.PlaneGeometry(layer.width, layer.height), material);
+      arc.position.set(0, layer.y, layer.z);
+      arc.rotation.z = layer.rotate;
+      arc.rotation.y = -0.04;
+      scene.add(arc);
+      return arc;
+    });
+
+    const windTexture = makeWindTexture();
+    const windRibbons = [0, 1, 2].map((index) => {
+      const ribbon = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.8 - index * 0.46, 0.64),
+        new THREE.MeshBasicMaterial({
+          map: windTexture,
+          color: index === 1 ? 0xffe1a1 : 0xc9efff,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          depthTest: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      ribbon.position.set(-0.4 + index * 0.28, 1.85 + index * 0.18, 0.7 + index * 0.02);
+      ribbon.rotation.z = -0.33 - index * 0.08;
+      scene.add(ribbon);
+      return ribbon;
+    });
+
+    const hitSparkCount = 150;
+    const hitPositions = new Float32Array(hitSparkCount * 3);
+    const hitSeeds = Array.from({ length: hitSparkCount }, () => ({
+      angle: -Math.PI * 0.18 + (Math.random() - 0.5) * Math.PI * 1.55,
+      radius: Math.random() * 0.28,
+      speed: 0.22 + Math.random() * 1.08,
+      lift: -0.08 + Math.random() * 0.54,
+    }));
+    const hitGeometry = new THREE.BufferGeometry();
+    hitGeometry.setAttribute('position', new THREE.BufferAttribute(hitPositions, 3));
+    const hitSparks = new THREE.Points(
+      hitGeometry,
+      new THREE.PointsMaterial({
+        color: 0xfff1b1,
+        size: 0.062,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    scene.add(hitSparks);
+
+    const slashSparkCount = 210;
+    const slashSparkPositions = new Float32Array(slashSparkCount * 3);
+    const slashSparkSeeds = Array.from({ length: slashSparkCount }, () => ({
+      along: Math.random(),
+      drift: (Math.random() - 0.5) * 0.42,
+      speed: Math.random() * 0.65 + 0.18,
+      lift: (Math.random() - 0.5) * 0.48,
+    }));
+    const slashSparkGeometry = new THREE.BufferGeometry();
+    slashSparkGeometry.setAttribute('position', new THREE.BufferAttribute(slashSparkPositions, 3));
+    const slashSparks = new THREE.Points(
+      slashSparkGeometry,
+      new THREE.PointsMaterial({
+        color: 0xdaf5ff,
+        size: 0.044,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    scene.add(slashSparks);
+
+    const smokeTexture = makeSmokeTexture();
+    const smokeCount = 72;
+    const smokePositions = new Float32Array(smokeCount * 3);
+    const smokeSeeds = Array.from({ length: smokeCount }, () => ({
+      angle: Math.random() * Math.PI * 2,
+      radius: Math.random() * 0.3,
+      drift: -0.65 + Math.random() * 0.5,
+      lift: Math.random() * 0.42,
+      wobble: Math.random() * Math.PI * 2,
+    }));
+    const smokeGeometry = new THREE.BufferGeometry();
+    smokeGeometry.setAttribute('position', new THREE.BufferAttribute(smokePositions, 3));
+    const smoke = new THREE.Points(
+      smokeGeometry,
+      new THREE.PointsMaterial({
+        map: smokeTexture,
+        color: 0xbcc8c3,
+        size: 0.36,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+      }),
+    );
+    scene.add(smoke);
+
     const particleGeometry = new THREE.BufferGeometry();
     const particleCount = 440;
     const positions = new Float32Array(particleCount * 3);
@@ -438,9 +684,29 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
 
     const clock = new THREE.Clock();
     let raf = 0;
+    const easeOutCubic = (value: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, value)), 3);
+    const easeInOutCubic = (value: number) => {
+      const p = Math.min(1, Math.max(0, value));
+      return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+    };
+    const windowProgress = (progress: number, start: number, end: number) => Math.min(1, Math.max(0, (progress - start) / (end - start)));
+    const pulseWindow = (progress: number, start: number, end: number) => {
+      const p = windowProgress(progress, start, end);
+      return p <= 0 || p >= 1 ? 0 : Math.sin(p * Math.PI);
+    };
+
     const animate = () => {
       const t = clock.getElapsedTime();
       raf = requestAnimationFrame(animate);
+      const combatCycle = battleMode === 'slash' ? forcedBattlePhase ?? (t % 3.05) / 3.05 : 0;
+      const slashBurst = pulseWindow(combatCycle, 0.28, 0.72);
+      const slashDraw = easeOutCubic(windowProgress(combatCycle, 0.26, 0.54));
+      const slashFade = 1 - easeOutCubic(windowProgress(combatCycle, 0.56, 0.82));
+      const hitBurst = pulseWindow(combatCycle, 0.47, 0.77);
+      const smokeBurst = pulseWindow(combatCycle, 0.18, 0.92);
+      const windBurst = pulseWindow(combatCycle, 0.24, 0.86);
+      const lunge = battleMode === 'slash' ? easeInOutCubic(windowProgress(combatCycle, 0.18, 0.4)) * (1 - easeOutCubic(windowProgress(combatCycle, 0.58, 0.94))) : 0;
+      const recoil = battleMode === 'slash' ? pulseWindow(combatCycle, 0.48, 0.8) : 0;
 
       floorTexture.offset.set(Math.sin(t * 0.06) * 0.006, Math.cos(t * 0.05) * 0.005);
       camera.position.x = Math.sin(t * 0.2) * 0.18;
@@ -448,21 +714,33 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
       camera.position.z = cameraRig.z;
       camera.lookAt(Math.sin(t * 0.17) * 0.25, cameraRig.targetY, cameraRig.targetZ);
 
-      hero.position.x = layoutRig.heroX;
-      hero.position.y = 1.28 + Math.sin(t * 2.2) * 0.045;
-      enemy.position.x = layoutRig.enemyX;
-      enemy.position.y = 1.32 + Math.sin(t * 1.8 + 1.1) * 0.055;
-      hero.scale.set(2.0 * layoutRig.heroScale, 2.35 * layoutRig.heroScale, 1);
+      const heroCombatScale = battleMode === 'slash' && combatCycle < 0.9 ? 1.12 : 1;
+      const isSlashSprite = battleMode === 'slash' && combatCycle < 0.9;
+      if (isSlashSprite) {
+        const frame = combatCycle < 0.25 ? 0 : combatCycle < 0.4 ? 1 : combatCycle < 0.62 ? 2 : 3;
+        hero.material.map = heroSlashTexture;
+        heroSlashTexture.offset.x = frame / 4;
+        heroSlashTexture.needsUpdate = true;
+      } else {
+        hero.material.map = heroTexture;
+      }
+      hero.material.needsUpdate = true;
+
+      hero.position.x = layoutRig.heroX + lunge * (layoutRig.heroScale > 0.9 ? 0.72 : 0.42);
+      hero.position.y = 1.28 + Math.sin(t * 2.2) * 0.045 + lunge * 0.08;
+      enemy.position.x = layoutRig.enemyX + recoil * 0.05;
+      enemy.position.y = 1.32 + Math.sin(t * 1.8 + 1.1) * 0.055 + recoil * 0.04;
+      hero.scale.set(2.2 * layoutRig.heroScale * heroCombatScale, 2.48 * layoutRig.heroScale * heroCombatScale, 1);
       enemy.scale.set(2.05 * layoutRig.enemyScale, 2.4 * layoutRig.enemyScale, 1);
       heroBloom.position.copy(hero.position);
       heroBloom.position.z += 0.012;
-      heroBloom.scale.set(2.14 * layoutRig.heroScale, 2.52 * layoutRig.heroScale, 1);
+      heroBloom.scale.set(2.3 * layoutRig.heroScale * heroCombatScale, 2.68 * layoutRig.heroScale * heroCombatScale, 1);
       enemyBloom.position.copy(enemy.position);
       enemyBloom.position.z += 0.012;
       enemyBloom.scale.set(2.2 * layoutRig.enemyScale, 2.58 * layoutRig.enemyScale, 1);
-      heroBlobShadow.position.x = layoutRig.heroX;
+      heroBlobShadow.position.x = hero.position.x;
       enemyBlobShadow.position.x = layoutRig.enemyX;
-      heroShadow.position.x = layoutRig.heroX + 0.28;
+      heroShadow.position.x = hero.position.x + 0.28;
       enemyShadow.position.x = layoutRig.enemyX + 0.28;
       heroBlobShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.025);
       enemyBlobShadow.scale.setScalar(1 + Math.sin(t * 1.8 + 1.1) * 0.03);
@@ -479,6 +757,70 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
       litPatches.forEach((patch, i) => {
         patch.material.opacity = 0.16 + Math.sin(t * 0.75 + i) * 0.035;
       });
+
+      const slashCenterX = (layoutRig.heroX + layoutRig.enemyX) * 0.5 - (layoutRig.heroScale > 0.9 ? 0.1 : 0.02);
+      slashArcs.forEach((arc, i) => {
+        const layer = slashLayers[i];
+        const layerDelay = i * 0.045;
+        const draw = easeOutCubic(windowProgress(combatCycle, 0.26 + layerDelay, 0.56 + layerDelay));
+        const fade = 1 - easeOutCubic(windowProgress(combatCycle, 0.57 + layerDelay, 0.84 + layerDelay));
+        const material = arc.material as THREE.ShaderMaterial;
+        arc.position.set(slashCenterX + layer.x * layoutRig.heroScale, layer.y, layer.z);
+        arc.scale.setScalar(layoutRig.heroScale > 0.9 ? 1 : 0.76);
+        material.uniforms.revealHead.value = Math.min(1.02, 0.08 + draw * 0.92);
+        material.uniforms.revealTail.value = Math.max(-0.08, draw - 0.7);
+        material.uniforms.opacity.value = battleMode === 'slash' ? Math.max(0, fade) * layer.opacity : 0;
+      });
+
+      windRibbons.forEach((ribbon, i) => {
+        const localPulse = Math.max(0, windBurst - i * 0.07);
+        ribbon.position.x = layoutRig.heroX + 1.12 + i * 0.34;
+        ribbon.position.y = 1.5 + i * 0.19 + Math.sin(t * 3.4 + i) * 0.018;
+        ribbon.position.z = 0.66 + i * 0.035;
+        ribbon.scale.set(0.85 + slashDraw * 0.2, 0.4 + localPulse * 0.14, 1);
+        ribbon.material.opacity = battleMode === 'slash' ? localPulse * slashFade * (0.26 - i * 0.04) : 0;
+      });
+
+      const hitArr = hitGeometry.attributes.position.array as Float32Array;
+      for (let i = 0; i < hitSparkCount; i += 1) {
+        const seed = hitSeeds[i];
+        const burstAge = windowProgress(combatCycle, 0.47, 0.77);
+        const distance = seed.radius + easeOutCubic(burstAge) * seed.speed;
+        hitArr[i * 3] = layoutRig.enemyX - 0.34 + Math.cos(seed.angle) * distance * 0.54;
+        hitArr[i * 3 + 1] = 1.9 + Math.sin(seed.angle) * distance * 0.34 + seed.lift * burstAge;
+        hitArr[i * 3 + 2] = enemy.position.z + 0.11 + Math.sin(seed.angle * 1.7) * distance * 0.12;
+      }
+      hitGeometry.attributes.position.needsUpdate = true;
+      hitSparks.material.opacity = battleMode === 'slash' ? hitBurst * 0.95 : 0;
+      hitSparks.material.size = 0.036 + hitBurst * 0.046;
+
+      const slashSparkArr = slashSparkGeometry.attributes.position.array as Float32Array;
+      const slashAge = windowProgress(combatCycle, 0.3, 0.68);
+      for (let i = 0; i < slashSparkCount; i += 1) {
+        const seed = slashSparkSeeds[i];
+        const along = Math.min(1, seed.along + slashAge * seed.speed);
+        const arcX = layoutRig.heroX + 0.52 + along * (layoutRig.enemyX - layoutRig.heroX - 0.42);
+        const arcY = 1.18 + Math.sin(along * Math.PI) * 1.18 + seed.drift * 0.72;
+        slashSparkArr[i * 3] = arcX;
+        slashSparkArr[i * 3 + 1] = arcY + seed.lift * slashAge;
+        slashSparkArr[i * 3 + 2] = 0.78 + (seed.drift * 0.16);
+      }
+      slashSparkGeometry.attributes.position.needsUpdate = true;
+      slashSparks.material.opacity = battleMode === 'slash' ? slashBurst * 0.72 : 0;
+      slashSparks.material.size = 0.026 + slashBurst * 0.036;
+
+      const smokeArr = smokeGeometry.attributes.position.array as Float32Array;
+      const smokeAge = windowProgress(combatCycle, 0.18, 0.92);
+      for (let i = 0; i < smokeCount; i += 1) {
+        const seed = smokeSeeds[i];
+        const spread = seed.radius + smokeAge * (0.48 + i / smokeCount * 0.28);
+        smokeArr[i * 3] = layoutRig.heroX - 0.06 + Math.cos(seed.angle) * spread + seed.drift * smokeAge;
+        smokeArr[i * 3 + 1] = 0.28 + seed.lift * smokeAge + Math.sin(t * 1.4 + seed.wobble) * 0.025;
+        smokeArr[i * 3 + 2] = 0.56 + Math.sin(seed.angle) * spread * 0.7;
+      }
+      smokeGeometry.attributes.position.needsUpdate = true;
+      smoke.material.opacity = battleMode === 'slash' ? smokeBurst * 0.36 : 0;
+      smoke.material.size = (layoutRig.heroScale > 0.9 ? 0.24 : 0.18) + smokeAge * 0.34;
 
       const arr = particleGeometry.attributes.position.array as Float32Array;
       for (let i = 0; i < particleCount; i += 1) {
@@ -566,19 +908,50 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
           materials.forEach((material) => material.dispose());
         }
       });
-      [floorTexture, backdropTexture, heroTexture, enemyTexture, glowTexture, beamTexture, blobShadowTexture, heroSilhouetteTexture, enemySilhouetteTexture, floorLightTexture].forEach((texture) => texture.dispose());
+      [
+        floorTexture,
+        backdropTexture,
+        heroTexture,
+        heroSlashTexture,
+        enemyTexture,
+        glowTexture,
+        beamTexture,
+        blobShadowTexture,
+        heroSilhouetteTexture,
+        enemySilhouetteTexture,
+        floorLightTexture,
+        ...slashTextures,
+        windTexture,
+        smokeTexture,
+      ].forEach((texture) => texture.dispose());
     };
-  }, [viewMode]);
+  }, [viewMode, battleMode]);
 
   return <div className="scene" ref={mountRef} />;
 }
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('auto');
+  const [battleMode, setBattleMode] = useState<BattleMode>(() => (new URLSearchParams(window.location.search).get('battle') === 'slash' ? 'slash' : 'idle'));
 
   return (
     <>
-      <DungeonScene viewMode={viewMode} />
+      <DungeonScene viewMode={viewMode} battleMode={battleMode} />
+      <div className="battle-switch" aria-label="戦闘演出切替">
+        {([
+          ['idle', '待機'],
+          ['slash', '斬撃POC'],
+        ] as const).map(([mode, label]) => (
+          <button
+            className={battleMode === mode ? 'active' : ''}
+            key={mode}
+            onClick={() => setBattleMode(mode)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="view-switch" aria-label="表示モード切替">
         {(['auto', 'pc', 'sp'] as const).map((mode) => (
           <button

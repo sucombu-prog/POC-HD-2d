@@ -69,6 +69,22 @@ canvas {
   backdrop-filter: blur(10px);
 }
 
+.battle-switch {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 210, 122, 0.24);
+  border-radius: 8px;
+  background: rgba(4, 10, 15, 0.58);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.battle-switch button,
 .view-switch button {
   min-width: 46px;
   height: 30px;
@@ -81,6 +97,12 @@ canvas {
   cursor: pointer;
 }
 
+.battle-switch button {
+  min-width: 72px;
+  padding: 0 10px;
+}
+
+.battle-switch button.active,
 .view-switch button.active {
   color: #fff8df;
   background: rgba(255, 187, 78, 0.22);
@@ -88,13 +110,27 @@ canvas {
 }
 
 @media (max-width: 560px) {
+  .battle-switch,
   .view-switch {
     top: max(10px, env(safe-area-inset-top));
+  }
+
+  .battle-switch {
+    left: max(10px, env(safe-area-inset-left));
+  }
+
+  .view-switch {
     right: max(10px, env(safe-area-inset-right));
   }
 
+  .battle-switch button,
   .view-switch button {
     min-width: 40px;
     height: 28px;
+  }
+
+  .battle-switch button {
+    min-width: 62px;
+    padding: 0 8px;
   }
 }
