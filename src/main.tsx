@@ -17,10 +17,206 @@ const ASSETS = {
 };
 
 type ViewMode = 'auto' | 'pc' | 'sp';
-type BattleMode = 'idle' | 'slash';
+type BattleMode = 'idle' | 'slash' | 'thrust';
+type StageId = 'dungeon' | 'sanctum';
+type ResponsiveProfile = 'pc' | 'sp';
+type Vec3Tuple = [number, number, number];
+
+type StageCameraProfile = {
+  fov: number | ((aspect: number) => number);
+  position: Vec3Tuple;
+  target: Vec3Tuple;
+  idleSway: Vec3Tuple;
+  zoom: number;
+  shake: number;
+};
+
+type StageLayoutProfile = {
+  hero: Vec3Tuple;
+  enemy: Vec3Tuple;
+  heroScale: number;
+  enemyScale: number;
+};
+
+type StageDefinition = {
+  id: StageId;
+  label: string;
+  assets: {
+    floor: string;
+    backdrop: string;
+  };
+  world: {
+    background: number;
+    fog: number;
+    fogDensity: number;
+  };
+  floor: {
+    repeat: [number, number];
+    emissive: number;
+    emissiveIntensity: number;
+    roughness: number;
+  };
+  backdrop: {
+    position: Vec3Tuple;
+    height: number;
+    opacity: number;
+  };
+  parallax: Array<{
+    name: 'sky' | 'far' | 'mid';
+    color: number;
+    opacity: number;
+    position: Vec3Tuple;
+    size: [number, number];
+    drift: number;
+  }>;
+  lights: {
+    hemiSky: number;
+    hemiGround: number;
+    hemiIntensity: number;
+    key: { color: number; intensity: number; position: Vec3Tuple };
+    point: { color: number; intensity: number; distance: number; decay: number; position: Vec3Tuple };
+    hero: { color: number; intensity: number; distance: number; decay: number; position: Vec3Tuple };
+    enemy: { color: number; intensity: number; distance: number; decay: number; position: Vec3Tuple };
+  };
+  camera: Record<ResponsiveProfile, StageCameraProfile>;
+  layout: Record<ResponsiveProfile, StageLayoutProfile>;
+};
 
 const BACKDROP_WORLD_HEIGHT = 34;
 const BACKDROP_FALLBACK_ASPECT = 1578 / 997;
+
+const DUNGEON_CAMERA_PC = {
+  fov: (aspect: number) => Math.min(46, Math.max(30, 42 / Math.sqrt(aspect))),
+  position: [0, 8.35, 10.8] as Vec3Tuple,
+  target: [0, 1.25, -2.25] as Vec3Tuple,
+  idleSway: [0.18, 0.08, 0] as Vec3Tuple,
+  zoom: 1,
+  shake: 0.08,
+};
+
+const DUNGEON_CAMERA_SP = {
+  fov: (aspect: number) => (aspect < 0.75 ? 72 : 62),
+  position: [0, 8.35, 13.5] as Vec3Tuple,
+  target: [0, 1.05, -2.2] as Vec3Tuple,
+  idleSway: [0.14, 0.06, 0] as Vec3Tuple,
+  zoom: 1,
+  shake: 0.06,
+};
+
+const STAGES: Record<StageId, StageDefinition> = {
+  dungeon: {
+    id: 'dungeon',
+    label: 'Dungeon',
+    assets: {
+      floor: ASSETS.floor,
+      backdrop: ASSETS.backdrop,
+    },
+    world: {
+      background: 0x081019,
+      fog: 0x0c1a28,
+      fogDensity: 0.039,
+    },
+    floor: {
+      repeat: [4.6, 3.1],
+      emissive: 0x1c1408,
+      emissiveIntensity: 0.24,
+      roughness: 0.82,
+    },
+    backdrop: {
+      position: [0, 4.9, -8.4],
+      height: BACKDROP_WORLD_HEIGHT,
+      opacity: 1,
+    },
+    parallax: [
+      { name: 'sky', color: 0x1b3857, opacity: 0.18, position: [0, 9.2, -13.5], size: [150, 26], drift: 0.012 },
+      { name: 'far', color: 0x5c91a8, opacity: 0.08, position: [0, 5.7, -10.6], size: [128, 18], drift: 0.02 },
+      { name: 'mid', color: 0x80bedf, opacity: 0.09, position: [0, 4.2, -7.8], size: [136, 24], drift: 0.036 },
+    ],
+    lights: {
+      hemiSky: 0xc6ddff,
+      hemiGround: 0x1c252d,
+      hemiIntensity: 1.78,
+      key: { color: 0xe7f3ff, intensity: 3.55, position: [-4.8, 9, 5.5] },
+      point: { color: 0xffb847, intensity: 5.05, distance: 10.5, decay: 1.7, position: [4.9, 1.9, -1.6] },
+      hero: { color: 0xffd28e, intensity: 2.15, distance: 5.2, decay: 1.32, position: [-2.7, 2.35, 1.9] },
+      enemy: { color: 0x78c0ff, intensity: 2.55, distance: 5, decay: 1.3, position: [2, 2.3, 0.9] },
+    },
+    camera: {
+      pc: DUNGEON_CAMERA_PC,
+      sp: DUNGEON_CAMERA_SP,
+    },
+    layout: {
+      pc: { hero: [-2.25, 1.28, 0.5], enemy: [2.35, 1.32, -0.15], heroScale: 1, enemyScale: 1 },
+      sp: { hero: [-1.42, 1.28, 0.5], enemy: [1.42, 1.32, -0.15], heroScale: 0.88, enemyScale: 0.88 },
+    },
+  },
+  sanctum: {
+    id: 'sanctum',
+    label: 'Sanctum',
+    assets: {
+      floor: ASSETS.floor,
+      backdrop: ASSETS.backdrop,
+    },
+    world: {
+      background: 0x120d17,
+      fog: 0x221323,
+      fogDensity: 0.032,
+    },
+    floor: {
+      repeat: [3.8, 2.7],
+      emissive: 0x25110c,
+      emissiveIntensity: 0.34,
+      roughness: 0.74,
+    },
+    backdrop: {
+      position: [0, 5.15, -8.8],
+      height: BACKDROP_WORLD_HEIGHT,
+      opacity: 0.84,
+    },
+    parallax: [
+      { name: 'sky', color: 0x311931, opacity: 0.22, position: [0, 9.6, -13.2], size: [150, 27], drift: 0.01 },
+      { name: 'far', color: 0x6f453f, opacity: 0.11, position: [0, 5.9, -10.2], size: [130, 19], drift: 0.018 },
+      { name: 'mid', color: 0xd29362, opacity: 0.1, position: [0, 4.35, -7.45], size: [136, 24], drift: 0.03 },
+    ],
+    lights: {
+      hemiSky: 0xffd8b0,
+      hemiGround: 0x261923,
+      hemiIntensity: 1.55,
+      key: { color: 0xffd7a1, intensity: 3.3, position: [-3.7, 8.6, 4.4] },
+      point: { color: 0xff8742, intensity: 5.7, distance: 10.8, decay: 1.55, position: [3.8, 2.0, -1.2] },
+      hero: { color: 0xffc06a, intensity: 2.35, distance: 5.4, decay: 1.25, position: [-2.4, 2.2, 1.85] },
+      enemy: { color: 0xb7d7ff, intensity: 2.2, distance: 5, decay: 1.35, position: [2.2, 2.45, 0.65] },
+    },
+    camera: {
+      pc: { ...DUNGEON_CAMERA_PC, position: [0, 8.0, 10.15], target: [0, 1.35, -2.0], zoom: 1.05, shake: 0.1 },
+      sp: { ...DUNGEON_CAMERA_SP, position: [0, 8.1, 12.9], target: [0, 1.12, -2.05], zoom: 1.03, shake: 0.08 },
+    },
+    layout: {
+      pc: { hero: [-2.05, 1.32, 0.58], enemy: [2.18, 1.35, -0.12], heroScale: 1.02, enemyScale: 1 },
+      sp: { hero: [-1.32, 1.3, 0.58], enemy: [1.34, 1.34, -0.12], heroScale: 0.88, enemyScale: 0.88 },
+    },
+  },
+};
+
+const STAGE_IDS = Object.keys(STAGES) as StageId[];
+
+function setVec3(target: THREE.Vector3, value: Vec3Tuple) {
+  target.set(value[0], value[1], value[2]);
+}
+
+function getProfile(viewMode: ViewMode, width: number, aspect: number): ResponsiveProfile {
+  if (viewMode !== 'auto') return viewMode;
+  return width <= 760 || aspect < 0.86 ? 'sp' : 'pc';
+}
+
+function resolveFov(fov: StageCameraProfile['fov'], aspect: number) {
+  return typeof fov === 'function' ? fov(aspect) : fov;
+}
+
+function hasTextureImage(texture: THREE.Texture) {
+  const image = texture.image as HTMLImageElement | HTMLCanvasElement | undefined;
+  return Boolean(image && image.width > 0 && image.height > 0);
+}
 
 function getViewportSize(mount: HTMLElement) {
   const rect = mount.getBoundingClientRect();
@@ -186,6 +382,155 @@ function makeSlashTexture(layer = 0) {
   return texture;
 }
 
+function makeThrustTexture(layer = 0) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 384;
+  canvas.height = 1024;
+  const ctx = canvas.getContext('2d')!;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const centerX = 192;
+  const tailY = 900 - layer * 26;
+  const tipY = 98 + layer * 24;
+  const coreWidth = 18 - layer * 3;
+  const auraWidth = 112 - layer * 24;
+
+  const aura = ctx.createLinearGradient(0, tailY, 0, tipY);
+  aura.addColorStop(0, 'rgba(118, 211, 255, 0)');
+  aura.addColorStop(0.22, 'rgba(136, 223, 255, 0.2)');
+  aura.addColorStop(0.64, layer === 1 ? 'rgba(255, 238, 169, 0.52)' : 'rgba(205, 244, 255, 0.46)');
+  aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.strokeStyle = aura;
+  ctx.lineWidth = auraWidth;
+  ctx.beginPath();
+  ctx.moveTo(centerX, tailY);
+  ctx.lineTo(centerX, tipY + 114);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.lineWidth = 34 - layer * 7;
+  ctx.beginPath();
+  ctx.moveTo(centerX - 58, tailY + 18);
+  ctx.lineTo(centerX - 12, tipY + 170);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(centerX + 58, tailY + 18);
+  ctx.lineTo(centerX + 12, tipY + 170);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'source-over';
+  const core = ctx.createLinearGradient(0, tailY, 0, tipY);
+  core.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  core.addColorStop(0.38, 'rgba(230, 250, 255, 0.66)');
+  core.addColorStop(0.72, 'rgba(255, 248, 205, 0.86)');
+  core.addColorStop(1, 'rgba(255, 255, 255, 0.06)');
+  ctx.strokeStyle = core;
+  ctx.lineWidth = coreWidth;
+  ctx.beginPath();
+  ctx.moveTo(centerX, tailY);
+  ctx.lineTo(centerX, tipY + 118);
+  ctx.stroke();
+
+  const head = ctx.createLinearGradient(0, tipY + 180, 0, tipY);
+  head.addColorStop(0, 'rgba(142, 224, 255, 0)');
+  head.addColorStop(0.52, 'rgba(210, 245, 255, 0.48)');
+  head.addColorStop(0.8, 'rgba(255, 241, 178, 0.78)');
+  head.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = head;
+  ctx.beginPath();
+  ctx.moveTo(centerX, tipY);
+  ctx.lineTo(centerX - 112 + layer * 20, tipY + 210);
+  ctx.quadraticCurveTo(centerX - 36, tipY + 158, centerX, tipY + 128);
+  ctx.quadraticCurveTo(centerX + 36, tipY + 158, centerX + 112 - layer * 20, tipY + 210);
+  ctx.closePath();
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function makeShockRingTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(256, 256);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const soft = ctx.createRadialGradient(0, 0, 18, 0, 0, 228);
+  soft.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  soft.addColorStop(0.48, 'rgba(118, 214, 255, 0)');
+  soft.addColorStop(0.62, 'rgba(168, 235, 255, 0.14)');
+  soft.addColorStop(0.76, 'rgba(255, 228, 144, 0.08)');
+  soft.addColorStop(1, 'rgba(118, 214, 255, 0)');
+  ctx.fillStyle = soft;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 226, 92, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const drawBrokenEllipse = (radiusX: number, radiusY: number, width: number, alpha: number, offset = 0) => {
+    const gradient = ctx.createLinearGradient(-radiusX, 0, radiusX, 0);
+    gradient.addColorStop(0, 'rgba(130, 219, 255, 0)');
+    gradient.addColorStop(0.34, `rgba(211, 248, 255, ${alpha})`);
+    gradient.addColorStop(0.54, `rgba(255, 236, 166, ${alpha * 0.72})`);
+    gradient.addColorStop(1, 'rgba(130, 219, 255, 0)');
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = width;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radiusX, radiusY, 0, Math.PI * 0.12 + offset, Math.PI * 0.88 + offset);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radiusX, radiusY, 0, Math.PI * 1.12 + offset, Math.PI * 1.88 + offset);
+    ctx.stroke();
+  };
+
+  drawBrokenEllipse(184, 74, 14, 1);
+  drawBrokenEllipse(218, 92, 8, 0.62, 0.03);
+  drawBrokenEllipse(142, 54, 6, 0.48, -0.04);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function makeVortexTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(256, 256);
+  ctx.lineCap = 'round';
+
+  for (let arm = 0; arm < 4; arm += 1) {
+    const gradient = ctx.createLinearGradient(-210, -20, 210, 20);
+    gradient.addColorStop(0, 'rgba(122, 210, 255, 0)');
+    gradient.addColorStop(0.45, arm % 2 === 0 ? 'rgba(198, 240, 255, 0.34)' : 'rgba(255, 232, 157, 0.24)');
+    gradient.addColorStop(1, 'rgba(122, 210, 255, 0)');
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 8 - arm;
+    ctx.beginPath();
+    for (let i = 0; i <= 72; i += 1) {
+      const p = i / 72;
+      const angle = arm * Math.PI * 0.5 + p * Math.PI * 1.55;
+      const radius = 24 + p * 196;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * 0.38;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function makeRevealMaterial(texture: THREE.Texture, tint: number) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -193,6 +538,7 @@ function makeRevealMaterial(texture: THREE.Texture, tint: number) {
       opacity: { value: 0 },
       revealHead: { value: 0 },
       revealTail: { value: 0 },
+      revealFromBottom: { value: 0 },
       tint: { value: new THREE.Color(tint) },
     },
     vertexShader: `
@@ -207,11 +553,12 @@ function makeRevealMaterial(texture: THREE.Texture, tint: number) {
       uniform float opacity;
       uniform float revealHead;
       uniform float revealTail;
+      uniform float revealFromBottom;
       uniform vec3 tint;
       varying vec2 vUv;
       void main() {
         vec4 texel = texture2D(map, vUv);
-        float revealCoord = 1.0 - vUv.y;
+        float revealCoord = mix(1.0 - vUv.y, vUv.y, revealFromBottom);
         float head = 1.0 - smoothstep(revealHead, revealHead + 0.12, revealCoord);
         float tail = smoothstep(revealTail - 0.12, revealTail, revealCoord);
         float mask = clamp(head * tail, 0.0, 1.0);
@@ -282,6 +629,7 @@ function makeSilhouetteShadowTexture(src: string) {
 
   const image = new Image();
   image.onload = () => {
+    if (texture.userData.cancelled) return;
     const scratch = document.createElement('canvas');
     scratch.width = image.naturalWidth;
     scratch.height = image.naturalHeight;
@@ -311,6 +659,7 @@ function makeSilhouetteShadowTexture(src: string) {
     ctx.filter = 'blur(5px)';
     ctx.drawImage(scratch, -190, -232, 380, 416);
     ctx.restore();
+    if (texture.userData.cancelled) return;
     texture.needsUpdate = true;
   };
   image.src = src;
@@ -318,17 +667,18 @@ function makeSilhouetteShadowTexture(src: string) {
   return texture;
 }
 
-function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode: BattleMode }) {
+function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; battleMode: BattleMode; stageId: StageId }) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mount = mountRef.current!;
+    const stage = STAGES[stageId];
     const params = new URLSearchParams(window.location.search);
     const showDebug = params.has('debug');
     const forcedBattlePhase = params.has('phase') ? Math.min(1, Math.max(0, Number(params.get('phase')) || 0)) : null;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x081019);
-    scene.fog = new THREE.FogExp2(0x0c1a28, 0.039);
+    scene.background = new THREE.Color(stage.world.background);
+    scene.fog = new THREE.FogExp2(stage.world.fog, stage.world.fogDensity);
 
     const initialSize = getViewportSize(mount);
     const camera = new THREE.PerspectiveCamera(36, initialSize.width / initialSize.height, 0.1, 100);
@@ -336,14 +686,25 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
     camera.lookAt(0, 0.4, -0.8);
     const cameraRig = {
       fov: 36,
+      x: 0,
       y: 7.55,
       z: 10.8,
+      targetX: 0,
       targetY: 0.42,
       targetZ: -0.8,
+      swayX: 0.18,
+      swayY: 0.08,
+      swayZ: 0,
+      zoom: 1,
+      shake: 0,
     };
     const layoutRig = {
       heroX: -2.25,
+      heroY: 1.28,
+      heroZ: 0.5,
       enemyX: 2.45,
+      enemyY: 1.32,
+      enemyZ: -0.15,
       heroScale: 1,
       enemyScale: 1,
     };
@@ -360,21 +721,21 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
     renderer.domElement.dataset.debugCanvas = 'true';
 
     const loader = new THREE.TextureLoader();
-    const floorTexture = loader.load(ASSETS.floor);
+    const floorTexture = loader.load(stage.assets.floor);
     floorTexture.colorSpace = THREE.SRGBColorSpace;
     floorTexture.wrapS = THREE.RepeatWrapping;
     floorTexture.wrapT = THREE.RepeatWrapping;
-    floorTexture.repeat.set(4.6, 3.1);
+    floorTexture.repeat.set(stage.floor.repeat[0], stage.floor.repeat[1]);
     floorTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(96, 64, 160, 120),
       new THREE.MeshStandardMaterial({
         map: floorTexture,
-        roughness: 0.82,
+        roughness: stage.floor.roughness,
         metalness: 0.02,
-        emissive: new THREE.Color(0x1c1408),
-        emissiveIntensity: 0.24,
+        emissive: new THREE.Color(stage.floor.emissive),
+        emissiveIntensity: stage.floor.emissiveIntensity,
       }),
     );
     floor.rotation.x = -Math.PI / 2;
@@ -382,29 +743,32 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
     scene.add(floor);
 
     let backdrop: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-    const backdropTexture = loader.load(ASSETS.backdrop, (texture) => {
+    const backdropTexture = loader.load(stage.assets.backdrop, (texture) => {
       fitBackdropToTexture(backdrop, texture);
     });
     backdropTexture.colorSpace = THREE.SRGBColorSpace;
     backdrop = new THREE.Mesh(
-      new THREE.PlaneGeometry(BACKDROP_WORLD_HEIGHT * BACKDROP_FALLBACK_ASPECT, BACKDROP_WORLD_HEIGHT),
-      new THREE.MeshBasicMaterial({ map: backdropTexture, transparent: true }),
+      new THREE.PlaneGeometry(stage.backdrop.height * BACKDROP_FALLBACK_ASPECT, stage.backdrop.height),
+      new THREE.MeshBasicMaterial({ map: backdropTexture, transparent: true, opacity: stage.backdrop.opacity }),
     );
-    backdrop.position.set(0, 4.9, -8.4);
+    setVec3(backdrop.position, stage.backdrop.position);
     scene.add(backdrop);
 
-    const backMist = new THREE.Mesh(
-      new THREE.PlaneGeometry(136, 24),
-      new THREE.MeshBasicMaterial({ color: 0x80bedf, transparent: true, opacity: 0.09, depthWrite: false }),
-    );
-    backMist.position.set(0, 4.2, -7.8);
-    scene.add(backMist);
+    const parallaxLayers = stage.parallax.map((layer) => {
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(layer.size[0], layer.size[1]),
+        new THREE.MeshBasicMaterial({ color: layer.color, transparent: true, opacity: layer.opacity, depthWrite: false }),
+      );
+      setVec3(mesh.position, layer.position);
+      scene.add(mesh);
+      return { mesh, config: layer };
+    });
 
-    const ambient = new THREE.HemisphereLight(0xc6ddff, 0x1c252d, 1.78);
+    const ambient = new THREE.HemisphereLight(stage.lights.hemiSky, stage.lights.hemiGround, stage.lights.hemiIntensity);
     scene.add(ambient);
 
-    const moon = new THREE.DirectionalLight(0xe7f3ff, 3.55);
-    moon.position.set(-4.8, 9, 5.5);
+    const moon = new THREE.DirectionalLight(stage.lights.key.color, stage.lights.key.intensity);
+    setVec3(moon.position, stage.lights.key.position);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
     moon.shadow.camera.left = -8;
@@ -413,16 +777,16 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
     moon.shadow.camera.bottom = -8;
     scene.add(moon);
 
-    const crystal = new THREE.PointLight(0xffb847, 5.05, 10.5, 1.7);
-    crystal.position.set(4.9, 1.9, -1.6);
+    const crystal = new THREE.PointLight(stage.lights.point.color, stage.lights.point.intensity, stage.lights.point.distance, stage.lights.point.decay);
+    setVec3(crystal.position, stage.lights.point.position);
     scene.add(crystal);
 
-    const heroKey = new THREE.PointLight(0xffd28e, 2.15, 5.2, 1.32);
-    heroKey.position.set(-2.7, 2.35, 1.9);
+    const heroKey = new THREE.PointLight(stage.lights.hero.color, stage.lights.hero.intensity, stage.lights.hero.distance, stage.lights.hero.decay);
+    setVec3(heroKey.position, stage.lights.hero.position);
     scene.add(heroKey);
 
-    const enemyRim = new THREE.PointLight(0x78c0ff, 2.55, 5.0, 1.3);
-    enemyRim.position.set(2.0, 2.3, 0.9);
+    const enemyRim = new THREE.PointLight(stage.lights.enemy.color, stage.lights.enemy.intensity, stage.lights.enemy.distance, stage.lights.enemy.decay);
+    setVec3(enemyRim.position, stage.lights.enemy.position);
     scene.add(enemyRim);
 
     const heroTexture = loader.load(ASSETS.hero);
@@ -439,12 +803,12 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
     heroSlashTexture.repeat.set(1 / 4, 1);
 
     const hero = new THREE.Sprite(new THREE.SpriteMaterial({ map: heroTexture, color: 0xffffff, transparent: true, alphaTest: 0.08 }));
-    hero.position.set(-2.25, 1.28, 0.5);
+    hero.position.set(layoutRig.heroX, layoutRig.heroY, layoutRig.heroZ);
     hero.scale.set(2.0, 2.35, 1);
     scene.add(hero);
 
     const enemy = new THREE.Sprite(new THREE.SpriteMaterial({ map: enemyTexture, color: 0xf6fbff, transparent: true, alphaTest: 0.08 }));
-    enemy.position.set(2.45, 1.32, -0.15);
+    enemy.position.set(layoutRig.enemyX, layoutRig.enemyY, layoutRig.enemyZ);
     enemy.scale.set(2.05, 2.4, 1);
     scene.add(enemy);
 
@@ -470,10 +834,10 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       scene.add(mesh);
       return mesh;
     };
-    const heroBlobShadow = makeBlob(-2.25, 0.5, 1.15);
-    const enemyBlobShadow = makeBlob(2.45, -0.15, 1.25);
-    const heroShadow = makeSilhouette(heroSilhouetteTexture, -2.25, 0.5, 1.02);
-    const enemyShadow = makeSilhouette(enemySilhouetteTexture, 2.45, -0.15, 1.08);
+    const heroBlobShadow = makeBlob(layoutRig.heroX, layoutRig.heroZ, 1.15);
+    const enemyBlobShadow = makeBlob(layoutRig.enemyX, layoutRig.enemyZ, 1.25);
+    const heroShadow = makeSilhouette(heroSilhouetteTexture, layoutRig.heroX, layoutRig.heroZ, 1.02);
+    const enemyShadow = makeSilhouette(enemySilhouetteTexture, layoutRig.enemyX, layoutRig.enemyZ, 1.08);
 
     const glowTexture = makeGlowTexture();
     const glowMaterial = new THREE.SpriteMaterial({ map: glowTexture, color: 0xffbe56, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -587,6 +951,62 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       return ribbon;
     });
 
+    const thrustTextures = [makeThrustTexture(0), makeThrustTexture(1), makeThrustTexture(2)];
+    const thrustLayers = [
+      { width: 1.18, height: 4.45, alongOffset: 0, side: 0, z: 0.9, rotate: 0, opacity: 0.86 },
+      { width: 0.92, height: 4.0, alongOffset: -0.04, side: -0.06, z: 0.93, rotate: -0.02, opacity: 0.48 },
+      { width: 1.46, height: 4.18, alongOffset: 0.03, side: 0.08, z: 0.88, rotate: 0.03, opacity: 0.34 },
+    ];
+    const thrustTrails = thrustTextures.map((texture, index) => {
+      const layer = thrustLayers[index];
+      const material = makeRevealMaterial(texture, index === 1 ? 0xfff0ba : 0xd3f6ff);
+      material.uniforms.revealFromBottom.value = 1;
+      const trail = new THREE.Mesh(new THREE.PlaneGeometry(layer.width, layer.height), material);
+      trail.rotation.y = -0.05;
+      scene.add(trail);
+      return trail;
+    });
+
+    const shockRingTexture = makeShockRingTexture();
+    const shockRings = [0, 1, 2].map((index) => {
+      const ring = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.0, 1.0),
+        new THREE.MeshBasicMaterial({
+          map: shockRingTexture,
+          color: index === 1 ? 0xffecb4 : 0xd8f6ff,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          depthTest: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      ring.rotation.z = -0.78 + index * 0.18;
+      scene.add(ring);
+      return ring;
+    });
+
+    const vortexTexture = makeVortexTexture();
+    const vortexWinds = [0, 1, 2].map((index) => {
+      const vortex = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.65 + index * 0.34, 0.86 + index * 0.18),
+        new THREE.MeshBasicMaterial({
+          map: vortexTexture,
+          color: index === 1 ? 0xffdf9a : 0xc7efff,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          depthTest: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      vortex.rotation.z = -0.78 + index * 0.13;
+      scene.add(vortex);
+      return vortex;
+    });
+
     const hitSparkCount = 150;
     const hitPositions = new Float32Array(hitSparkCount * 3);
     const hitSeeds = Array.from({ length: hitSparkCount }, () => ({
@@ -694,6 +1114,29 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
     );
     scene.add(slashSparks);
 
+    const thrustSparkCount = 170;
+    const thrustSparkPositions = new Float32Array(thrustSparkCount * 3);
+    const thrustSparkSeeds = Array.from({ length: thrustSparkCount }, () => ({
+      along: Math.random(),
+      side: (Math.random() - 0.5) * 0.52,
+      lift: (Math.random() - 0.5) * 0.2,
+      speed: 0.14 + Math.random() * 0.78,
+    }));
+    const thrustSparkGeometry = new THREE.BufferGeometry();
+    thrustSparkGeometry.setAttribute('position', new THREE.BufferAttribute(thrustSparkPositions, 3));
+    const thrustSparks = new THREE.Points(
+      thrustSparkGeometry,
+      new THREE.PointsMaterial({
+        color: 0xe6fbff,
+        size: 0.04,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    scene.add(thrustSparks);
+
     const smokeTexture = makeSmokeTexture();
     const smokeCount = 72;
     const smokePositions = new Float32Array(smokeCount * 3);
@@ -778,42 +1221,86 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         z: 0.78 + drift * 0.1,
       };
     };
+    const sampleThrustLine = (along: number, side = 0, lift = 0) => {
+      const scale = layoutRig.heroScale > 0.9 ? 1 : 0.76;
+      const p = Math.min(1, Math.max(0, along));
+      const originX = layoutRig.heroX + 0.44 * scale;
+      const originY = layoutRig.heroY - 0.2;
+      const tipX = layoutRig.enemyX - 0.52 * layoutRig.enemyScale;
+      const tipY = layoutRig.enemyY + 0.88;
+      const dx = tipX - originX;
+      const dy = tipY - originY;
+      const length = Math.hypot(dx, dy) || 1;
+      const normalX = -dy / length;
+      const normalY = dx / length;
+      return {
+        x: originX + (tipX - originX) * p + normalX * side * scale,
+        y: originY + (tipY - originY) * p + normalY * side * scale + lift,
+        z: 0.84 + p * 0.22 + side * 0.06,
+      };
+    };
+    const getThrustPath = () => {
+      const start = sampleThrustLine(0, 0, 0);
+      const end = sampleThrustLine(1, 0, 0);
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      return {
+        start,
+        end,
+        angle: Math.atan2(dy, dx) - Math.PI / 2,
+        length: Math.hypot(dx, dy),
+      };
+    };
 
     const animate = () => {
       const t = clock.getElapsedTime();
       raf = requestAnimationFrame(animate);
-      const combatCycle = battleMode === 'slash' ? forcedBattlePhase ?? (t % 3.05) / 3.05 : 0;
+      const isBattleActive = battleMode !== 'idle';
+      const combatCycle = isBattleActive ? forcedBattlePhase ?? (t % 3.05) / 3.05 : 0;
       const slashBurst = pulseWindow(combatCycle, 0.32, 0.62);
       const slashDraw = easeOutCubic(windowProgress(combatCycle, 0.32, 0.42));
       const slashFade = 1 - easeOutCubic(windowProgress(combatCycle, 0.56, 0.66));
+      const thrustBurst = pulseWindow(combatCycle, 0.28, 0.56);
+      const thrustDraw = easeOutCubic(windowProgress(combatCycle, 0.28, 0.38));
+      const thrustFade = 1 - easeOutCubic(windowProgress(combatCycle, 0.5, 0.64));
       const hitBurst = pulseWindow(combatCycle, 0.47, 0.77);
       const smokeBurst = pulseWindow(combatCycle, 0.18, 0.92);
       const windBurst = pulseWindow(combatCycle, 0.24, 0.86);
-      const lunge = battleMode === 'slash' ? easeInOutCubic(windowProgress(combatCycle, 0.18, 0.4)) * (1 - easeOutCubic(windowProgress(combatCycle, 0.58, 0.94))) : 0;
-      const recoil = battleMode === 'slash' ? pulseWindow(combatCycle, 0.48, 0.8) : 0;
+      const lunge = isBattleActive ? easeInOutCubic(windowProgress(combatCycle, 0.18, 0.4)) * (1 - easeOutCubic(windowProgress(combatCycle, 0.58, 0.94))) : 0;
+      const recoil = isBattleActive ? pulseWindow(combatCycle, 0.48, 0.8) : 0;
 
       floorTexture.offset.set(Math.sin(t * 0.06) * 0.006, Math.cos(t * 0.05) * 0.005);
-      camera.position.x = Math.sin(t * 0.2) * 0.18;
-      camera.position.y = cameraRig.y + Math.sin(t * 0.16) * 0.08;
-      camera.position.z = cameraRig.z;
-      camera.lookAt(Math.sin(t * 0.17) * 0.25, cameraRig.targetY, cameraRig.targetZ);
+      const battleShake = isBattleActive ? hitBurst * cameraRig.shake : 0;
+      const shakeX = (Math.sin(t * 54.1) + Math.sin(t * 31.7)) * 0.5 * battleShake;
+      const shakeY = Math.sin(t * 45.3) * battleShake * 0.55;
+      camera.position.x = cameraRig.x + Math.sin(t * 0.2) * cameraRig.swayX + shakeX;
+      camera.position.y = cameraRig.y + Math.sin(t * 0.16) * cameraRig.swayY + shakeY;
+      camera.position.z = cameraRig.z + Math.sin(t * 0.13) * cameraRig.swayZ;
+      camera.lookAt(cameraRig.targetX + Math.sin(t * 0.17) * 0.25 + shakeX * 0.2, cameraRig.targetY + shakeY * 0.12, cameraRig.targetZ);
+      parallaxLayers.forEach(({ mesh, config }) => {
+        mesh.position.x = config.position[0] + camera.position.x * config.drift + Math.sin(t * 0.05 + config.position[2]) * config.drift * 0.8;
+      });
 
-      const heroCombatScale = battleMode === 'slash' && combatCycle < 0.9 ? 1.12 : 1;
-      const isSlashSprite = battleMode === 'slash' && combatCycle < 0.9;
+      const heroCombatScale = isBattleActive && combatCycle < 0.9 ? 1.12 : 1;
+      const isSlashSprite = isBattleActive && combatCycle < 0.9;
       if (isSlashSprite) {
         const frame = combatCycle < 0.25 ? 0 : combatCycle < 0.4 ? 1 : combatCycle < 0.62 ? 2 : 3;
         hero.material.map = heroSlashTexture;
         heroSlashTexture.offset.x = frame / 4;
-        heroSlashTexture.needsUpdate = true;
+        if (hasTextureImage(heroSlashTexture)) {
+          heroSlashTexture.needsUpdate = true;
+        }
       } else {
         hero.material.map = heroTexture;
       }
       hero.material.needsUpdate = true;
 
       hero.position.x = layoutRig.heroX + lunge * (layoutRig.heroScale > 0.9 ? 0.72 : 0.42);
-      hero.position.y = 1.28 + Math.sin(t * 2.2) * 0.045 + lunge * 0.08;
+      hero.position.y = layoutRig.heroY + Math.sin(t * 2.2) * 0.045 + lunge * 0.08;
+      hero.position.z = layoutRig.heroZ;
       enemy.position.x = layoutRig.enemyX + recoil * 0.05;
-      enemy.position.y = 1.32 + Math.sin(t * 1.8 + 1.1) * 0.055 + recoil * 0.04;
+      enemy.position.y = layoutRig.enemyY + Math.sin(t * 1.8 + 1.1) * 0.055 + recoil * 0.04;
+      enemy.position.z = layoutRig.enemyZ;
       hero.scale.set(2.2 * layoutRig.heroScale * heroCombatScale, 2.48 * layoutRig.heroScale * heroCombatScale, 1);
       enemy.scale.set(2.05 * layoutRig.enemyScale, 2.4 * layoutRig.enemyScale, 1);
       heroBloom.position.copy(hero.position);
@@ -826,6 +1313,10 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       enemyBlobShadow.position.x = layoutRig.enemyX;
       heroShadow.position.x = hero.position.x + 0.28;
       enemyShadow.position.x = layoutRig.enemyX + 0.28;
+      heroBlobShadow.position.z = layoutRig.heroZ + 0.22;
+      enemyBlobShadow.position.z = layoutRig.enemyZ + 0.22;
+      heroShadow.position.z = layoutRig.heroZ + 0.58;
+      enemyShadow.position.z = layoutRig.enemyZ + 0.58;
       heroBlobShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.025);
       enemyBlobShadow.scale.setScalar(1 + Math.sin(t * 1.8 + 1.1) * 0.03);
       heroShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.018);
@@ -866,10 +1357,50 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         ribbon.material.opacity = battleMode === 'slash' ? localPulse * slashFade * (0.26 - i * 0.04) : 0;
       });
 
+      const thrustPath = getThrustPath();
+      thrustTrails.forEach((trail, i) => {
+        const layer = thrustLayers[i];
+        const layerDelay = i * 0.012;
+        const draw = easeOutCubic(windowProgress(combatCycle, 0.28 + layerDelay, 0.38 + layerDelay));
+        const wipe = easeOutCubic(windowProgress(combatCycle, 0.43 + layerDelay, 0.56 + layerDelay));
+        const fade = 1 - easeOutCubic(windowProgress(combatCycle, 0.52 + layerDelay, 0.66 + layerDelay));
+        const material = trail.material as THREE.ShaderMaterial;
+        const center = sampleThrustLine(0.5 + layer.alongOffset, layer.side, 0);
+        trail.position.set(center.x, center.y, layer.z);
+        trail.rotation.z = thrustPath.angle + layer.rotate;
+        trail.scale.set(layoutRig.heroScale > 0.9 ? 1 : 0.78, (thrustPath.length / layer.height) * 1.08, 1);
+        material.uniforms.revealHead.value = Math.min(1.06, -0.08 + draw * 1.16);
+        material.uniforms.revealTail.value = Math.max(-0.12, -0.12 + wipe * 1.18);
+        material.uniforms.opacity.value = battleMode === 'thrust' ? Math.max(0, fade) * layer.opacity : 0;
+      });
+
+      const sonicBase = sampleThrustLine(0.18, 0, 0.08);
+      shockRings.forEach((ring, i) => {
+        const local = windowProgress(combatCycle, 0.18 + i * 0.03, 0.48 + i * 0.03);
+        const flash = local <= 0 || local >= 1 ? 0 : Math.sin(local * Math.PI);
+        ring.position.set(sonicBase.x + i * 0.045, sonicBase.y + i * 0.014, sonicBase.z - 0.02 + i * 0.014);
+        ring.scale.set(
+          (0.78 + easeOutCubic(local) * (0.7 + i * 0.14)) * layoutRig.heroScale,
+          (0.5 + easeOutCubic(local) * (0.38 + i * 0.08)) * layoutRig.heroScale,
+          1,
+        );
+        ring.rotation.z = thrustPath.angle + Math.PI / 2 + 0.1 + Math.sin(t * 2.2 + i) * 0.025;
+        ring.material.opacity = battleMode === 'thrust' ? flash * (0.82 - i * 0.15) : 0;
+      });
+
+      vortexWinds.forEach((vortex, i) => {
+        const localPulse = Math.max(0, windBurst - i * 0.08);
+        const point = sampleThrustLine(0.16 + i * 0.12, Math.sin(t * 2.4 + i) * 0.08, 0.02 * i);
+        vortex.position.set(point.x, point.y, point.z - 0.04 + i * 0.02);
+        vortex.scale.set(0.72 + thrustDraw * 0.52 + i * 0.08, 0.46 + localPulse * 0.26, 1);
+        vortex.rotation.z = thrustPath.angle + t * (0.75 + i * 0.16);
+        vortex.material.opacity = battleMode === 'thrust' ? localPulse * thrustFade * (0.34 - i * 0.06) : 0;
+      });
+
       const hitArr = hitGeometry.attributes.position.array as Float32Array;
       const hitAge = windowProgress(combatCycle, 0.47, 0.77);
       const hitOriginX = layoutRig.enemyX - 0.46;
-      const hitOriginY = 2.02;
+      const hitOriginY = layoutRig.enemyY + 0.7;
       const hitOriginZ = enemy.position.z + 0.16;
       for (let i = 0; i < hitSparkCount; i += 1) {
         const seed = hitSeeds[i];
@@ -879,7 +1410,7 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         hitArr[i * 3 + 2] = hitOriginZ + Math.sin(seed.angle * 1.7) * distance * 0.1;
       }
       hitGeometry.attributes.position.needsUpdate = true;
-      hitSparks.material.opacity = battleMode === 'slash' ? hitBurst * 0.5 : 0;
+      hitSparks.material.opacity = isBattleActive ? hitBurst * 0.5 : 0;
       hitSparks.material.size = 0.028 + hitBurst * 0.034;
 
       const hitLineArr = hitLineGeometry.attributes.position.array as Float32Array;
@@ -902,7 +1433,7 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         hitLineArr[offset + 5] = baseZ + 0.01;
       });
       hitLineGeometry.attributes.position.needsUpdate = true;
-      hitLines.material.opacity = battleMode === 'slash' ? Math.min(1, hitBurst * 1.25) : 0;
+      hitLines.material.opacity = isBattleActive ? Math.min(1, hitBurst * 1.25) : 0;
       hitNodes.forEach((node, i) => {
         const local = windowProgress(hitAge, i * 0.045, 0.28 + i * 0.045);
         const flash = local <= 0 || local >= 1 ? 0 : Math.sin(local * Math.PI);
@@ -914,7 +1445,7 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
           hitOriginZ + 0.02 + i * 0.004,
         );
         node.scale.setScalar((0.2 + i * 0.018 + flash * 0.22) * layoutRig.enemyScale);
-        node.material.opacity = battleMode === 'slash' ? flash * 0.66 : 0;
+        node.material.opacity = isBattleActive ? flash * 0.66 : 0;
       });
       hitStreaks.forEach((streak, i) => {
         const local = windowProgress(hitAge, i * 0.035, 0.2 + i * 0.035);
@@ -928,7 +1459,7 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         );
         streak.rotation.z = angle + Math.PI / 2;
         streak.scale.set(0.34 + flash * 0.22, 0.18 + flash * 0.34, 1);
-        streak.material.opacity = battleMode === 'slash' ? flash * (0.16 + (i % 3) * 0.04) : 0;
+        streak.material.opacity = isBattleActive ? flash * (0.16 + (i % 3) * 0.04) : 0;
       });
 
       const slashSparkArr = slashSparkGeometry.attributes.position.array as Float32Array;
@@ -947,14 +1478,31 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       slashSparks.material.opacity = battleMode === 'slash' ? slashBurst * 0.56 : 0;
       slashSparks.material.size = 0.024 + slashBurst * 0.032;
 
+      const thrustSparkArr = thrustSparkGeometry.attributes.position.array as Float32Array;
+      const thrustAge = windowProgress(combatCycle, 0.28, 0.58);
+      const thrustHead = Math.min(1, 0.08 + thrustDraw * 0.96);
+      const thrustTail = Math.max(0, thrustHead - 0.42 + windowProgress(combatCycle, 0.42, 0.58) * 0.86);
+      for (let i = 0; i < thrustSparkCount; i += 1) {
+        const seed = thrustSparkSeeds[i];
+        const along = thrustTail + seed.along * Math.max(0.04, thrustHead - thrustTail);
+        const side = seed.side * (0.25 + thrustAge * 0.9) + Math.sin(t * seed.speed + i) * 0.025;
+        const point = sampleThrustLine(along, side, seed.lift * thrustAge);
+        thrustSparkArr[i * 3] = point.x;
+        thrustSparkArr[i * 3 + 1] = point.y;
+        thrustSparkArr[i * 3 + 2] = point.z;
+      }
+      thrustSparkGeometry.attributes.position.needsUpdate = true;
+      thrustSparks.material.opacity = battleMode === 'thrust' ? thrustBurst * 0.62 : 0;
+      thrustSparks.material.size = 0.022 + thrustBurst * 0.038;
+
       const smokeArr = smokeGeometry.attributes.position.array as Float32Array;
       const smokeAge = windowProgress(combatCycle, 0.18, 0.92);
       for (let i = 0; i < smokeCount; i += 1) {
         const seed = smokeSeeds[i];
         const spread = seed.radius + smokeAge * (0.48 + i / smokeCount * 0.28);
         smokeArr[i * 3] = layoutRig.heroX - 0.06 + Math.cos(seed.angle) * spread + seed.drift * smokeAge;
-        smokeArr[i * 3 + 1] = 0.28 + seed.lift * smokeAge + Math.sin(t * 1.4 + seed.wobble) * 0.025;
-        smokeArr[i * 3 + 2] = 0.56 + Math.sin(seed.angle) * spread * 0.7;
+        smokeArr[i * 3 + 1] = layoutRig.heroY - 1 + seed.lift * smokeAge + Math.sin(t * 1.4 + seed.wobble) * 0.025;
+        smokeArr[i * 3 + 2] = layoutRig.heroZ + 0.06 + Math.sin(seed.angle) * spread * 0.7;
       }
       smokeGeometry.attributes.position.needsUpdate = true;
       smoke.material.opacity = battleMode === 'slash' ? smokeBurst * 0.36 : 0;
@@ -976,18 +1524,30 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       const { width, height } = getViewportSize(mount);
       if (width <= 0 || height <= 0) return;
       const aspect = width / height;
-      const autoProfile = width <= 760 || aspect < 0.86 ? 'sp' : 'pc';
-      const profile = viewMode === 'auto' ? autoProfile : viewMode;
+      const profile = getProfile(viewMode, width, aspect);
       const isPhone = profile === 'sp';
-      cameraRig.fov = isPhone ? (aspect < 0.75 ? 72 : 62) : Math.min(46, Math.max(30, 42 / Math.sqrt(aspect)));
-      cameraRig.y = isPhone ? 8.35 : 8.35;
-      cameraRig.z = isPhone ? (aspect < 0.75 ? 14.2 : 13.5) : 10.8;
-      cameraRig.targetY = isPhone ? 1.05 : 1.25;
-      cameraRig.targetZ = isPhone ? -2.2 : -2.25;
-      layoutRig.heroX = isPhone ? -1.42 : -2.25;
-      layoutRig.enemyX = isPhone ? 1.42 : 2.35;
-      layoutRig.heroScale = isPhone ? 0.88 : 1;
-      layoutRig.enemyScale = isPhone ? 0.88 : 1;
+      const cameraProfile = stage.camera[profile];
+      const layoutProfile = stage.layout[profile];
+      cameraRig.fov = resolveFov(cameraProfile.fov, aspect);
+      cameraRig.x = cameraProfile.position[0];
+      cameraRig.y = cameraProfile.position[1];
+      cameraRig.z = cameraProfile.position[2] / cameraProfile.zoom;
+      cameraRig.targetX = cameraProfile.target[0];
+      cameraRig.targetY = cameraProfile.target[1];
+      cameraRig.targetZ = cameraProfile.target[2];
+      cameraRig.swayX = cameraProfile.idleSway[0];
+      cameraRig.swayY = cameraProfile.idleSway[1];
+      cameraRig.swayZ = cameraProfile.idleSway[2];
+      cameraRig.zoom = cameraProfile.zoom;
+      cameraRig.shake = cameraProfile.shake;
+      layoutRig.heroX = layoutProfile.hero[0];
+      layoutRig.heroY = layoutProfile.hero[1];
+      layoutRig.heroZ = layoutProfile.hero[2];
+      layoutRig.enemyX = layoutProfile.enemy[0];
+      layoutRig.enemyY = layoutProfile.enemy[1];
+      layoutRig.enemyZ = layoutProfile.enemy[2];
+      layoutRig.heroScale = layoutProfile.heroScale;
+      layoutRig.enemyScale = layoutProfile.enemyScale;
       camera.fov = cameraRig.fov;
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -1039,6 +1599,8 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
       mount.removeChild(renderer.domElement);
       composer.dispose();
       renderer.dispose();
+      heroSilhouetteTexture.userData.cancelled = true;
+      enemySilhouetteTexture.userData.cancelled = true;
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.Sprite || object instanceof THREE.Points || object instanceof THREE.LineSegments) {
           object.geometry?.dispose?.();
@@ -1059,27 +1621,38 @@ function DungeonScene({ viewMode, battleMode }: { viewMode: ViewMode; battleMode
         enemySilhouetteTexture,
         floorLightTexture,
         ...slashTextures,
+        ...thrustTextures,
+        shockRingTexture,
+        vortexTexture,
         windTexture,
         hitNodeTexture,
         smokeTexture,
       ].forEach((texture) => texture.dispose());
     };
-  }, [viewMode, battleMode]);
+  }, [viewMode, battleMode, stageId]);
 
   return <div className="scene" ref={mountRef} />;
 }
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('auto');
-  const [battleMode, setBattleMode] = useState<BattleMode>(() => (new URLSearchParams(window.location.search).get('battle') === 'slash' ? 'slash' : 'idle'));
+  const [battleMode, setBattleMode] = useState<BattleMode>(() => {
+    const battle = new URLSearchParams(window.location.search).get('battle');
+    return battle === 'slash' || battle === 'thrust' ? battle : 'idle';
+  });
+  const [stageId, setStageId] = useState<StageId>(() => {
+    const stage = new URLSearchParams(window.location.search).get('stage');
+    return stage === 'sanctum' ? 'sanctum' : 'dungeon';
+  });
 
   return (
     <>
-      <DungeonScene viewMode={viewMode} battleMode={battleMode} />
+      <DungeonScene viewMode={viewMode} battleMode={battleMode} stageId={stageId} />
       <div className="battle-switch" aria-label="戦闘演出切替">
         {([
           ['idle', '待機'],
           ['slash', '斬撃POC'],
+          ['thrust', '突きPOC'],
         ] as const).map(([mode, label]) => (
           <button
             className={battleMode === mode ? 'active' : ''}
@@ -1088,6 +1661,18 @@ function App() {
             type="button"
           >
             {label}
+          </button>
+        ))}
+      </div>
+      <div className="stage-switch" aria-label="stage switch">
+        {STAGE_IDS.map((id) => (
+          <button
+            className={stageId === id ? 'active' : ''}
+            key={id}
+            onClick={() => setStageId(id)}
+            type="button"
+          >
+            {STAGES[id].label}
           </button>
         ))}
       </div>
