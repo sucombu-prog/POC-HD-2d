@@ -20,10 +20,11 @@ type ViewMode = 'auto' | 'pc' | 'sp';
 const colorGradeShader = {
   uniforms: {
     tDiffuse: { value: null },
+    exposure: { value: 1.08 },
     contrast: { value: 1.04 },
-    saturation: { value: 1.1 },
-    warmth: { value: -0.012 },
-    vignette: { value: 0.24 },
+    saturation: { value: 1.08 },
+    warmth: { value: 0.006 },
+    vignette: { value: 0.2 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -34,6 +35,7 @@ const colorGradeShader = {
   `,
   fragmentShader: `
     uniform sampler2D tDiffuse;
+    uniform float exposure;
     uniform float contrast;
     uniform float saturation;
     uniform float warmth;
@@ -42,7 +44,7 @@ const colorGradeShader = {
 
     void main() {
       vec4 texel = texture2D(tDiffuse, vUv);
-      vec3 color = texel.rgb;
+      vec3 color = texel.rgb * exposure;
       color = (color - 0.5) * contrast + 0.5;
       float grey = dot(color, vec3(0.299, 0.587, 0.114));
       color = mix(vec3(grey), color, saturation);
@@ -56,15 +58,18 @@ const colorGradeShader = {
   `,
 };
 
-function makeGlowTexture() {
+function makeGlowTexture(colorStops?: Array<[number, string]>) {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
   const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-  gradient.addColorStop(0, 'rgba(255, 227, 151, 1)');
-  gradient.addColorStop(0.25, 'rgba(255, 174, 58, 0.5)');
-  gradient.addColorStop(1, 'rgba(255, 174, 58, 0)');
+  const stops = colorStops ?? [
+    [0, 'rgba(255, 227, 151, 1)'],
+    [0.25, 'rgba(255, 174, 58, 0.5)'],
+    [1, 'rgba(255, 174, 58, 0)'],
+  ];
+  stops.forEach(([offset, color]) => gradient.addColorStop(offset, color));
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 256);
   return new THREE.CanvasTexture(canvas);
@@ -99,14 +104,60 @@ function makeBlobShadow() {
   return new THREE.CanvasTexture(canvas);
 }
 
+function makeSilhouetteShadowTexture(src: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  const image = new Image();
+  image.onload = () => {
+    const scratch = document.createElement('canvas');
+    scratch.width = image.naturalWidth;
+    scratch.height = image.naturalHeight;
+    const scratchCtx = scratch.getContext('2d', { willReadFrequently: true })!;
+    scratchCtx.drawImage(image, 0, 0);
+    const source = scratchCtx.getImageData(0, 0, scratch.width, scratch.height);
+    const data = source.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      const isChroma = r > 220 && g < 80 && b > 180;
+      const alpha = isChroma || a < 12 ? 0 : Math.min(160, a * 0.72);
+      data[i] = 0;
+      data[i + 1] = 0;
+      data[i + 2] = 0;
+      data[i + 3] = alpha;
+    }
+
+    scratchCtx.putImageData(source, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(258, 276);
+    ctx.transform(1, 0.18, -0.48, 0.58, 0, 0);
+    ctx.filter = 'blur(5px)';
+    ctx.drawImage(scratch, -190, -232, 380, 416);
+    ctx.restore();
+    texture.needsUpdate = true;
+  };
+  image.src = src;
+
+  return texture;
+}
+
 function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mount = mountRef.current!;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x071018);
-    scene.fog = new THREE.FogExp2(0x0a1520, 0.045);
+    scene.background = new THREE.Color(0x081019);
+    scene.fog = new THREE.FogExp2(0x0c1a28, 0.039);
 
     const camera = new THREE.PerspectiveCamera(36, mount.clientWidth / mount.clientHeight, 0.1, 100);
     camera.position.set(0, 7.6, 10.8);
@@ -127,8 +178,10 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.setSize(mount.clientWidth, mount.clientHeight, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     mount.appendChild(renderer.domElement);
@@ -147,8 +200,8 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
         map: floorTexture,
         roughness: 0.82,
         metalness: 0.02,
-        emissive: new THREE.Color(0x1a1307),
-        emissiveIntensity: 0.22,
+        emissive: new THREE.Color(0x1c1408),
+        emissiveIntensity: 0.24,
       }),
     );
     floor.rotation.x = -Math.PI / 2;
@@ -166,15 +219,15 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
 
     const backMist = new THREE.Mesh(
       new THREE.PlaneGeometry(28, 12),
-      new THREE.MeshBasicMaterial({ color: 0x7ab5d6, transparent: true, opacity: 0.08, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: 0x80bedf, transparent: true, opacity: 0.09, depthWrite: false }),
     );
     backMist.position.set(0, 4.2, -7.8);
     scene.add(backMist);
 
-    const ambient = new THREE.HemisphereLight(0xb8d4ff, 0x171f26, 1.68);
+    const ambient = new THREE.HemisphereLight(0xc6ddff, 0x1c252d, 1.78);
     scene.add(ambient);
 
-    const moon = new THREE.DirectionalLight(0xdfeeff, 3.2);
+    const moon = new THREE.DirectionalLight(0xe7f3ff, 3.55);
     moon.position.set(-4.8, 9, 5.5);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
@@ -184,15 +237,15 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
     moon.shadow.camera.bottom = -8;
     scene.add(moon);
 
-    const crystal = new THREE.PointLight(0xffb43b, 4.7, 10, 1.75);
+    const crystal = new THREE.PointLight(0xffb847, 5.05, 10.5, 1.7);
     crystal.position.set(4.9, 1.9, -1.6);
     scene.add(crystal);
 
-    const heroKey = new THREE.PointLight(0xffd08a, 1.45, 4.5, 1.4);
-    heroKey.position.set(-2.7, 2.1, 1.45);
+    const heroKey = new THREE.PointLight(0xffd28e, 2.15, 5.2, 1.32);
+    heroKey.position.set(-2.7, 2.35, 1.9);
     scene.add(heroKey);
 
-    const enemyRim = new THREE.PointLight(0x6db7ff, 2.2, 4.8, 1.35);
+    const enemyRim = new THREE.PointLight(0x78c0ff, 2.55, 5.0, 1.3);
     enemyRim.position.set(2.0, 2.3, 0.9);
     scene.add(enemyRim);
 
@@ -203,27 +256,42 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
     heroTexture.magFilter = THREE.NearestFilter;
     enemyTexture.magFilter = THREE.NearestFilter;
 
-    const hero = new THREE.Sprite(new THREE.SpriteMaterial({ map: heroTexture, color: 0xeef4ff, transparent: true, alphaTest: 0.08 }));
+    const hero = new THREE.Sprite(new THREE.SpriteMaterial({ map: heroTexture, color: 0xffffff, transparent: true, alphaTest: 0.08 }));
     hero.position.set(-2.25, 1.28, 0.5);
     hero.scale.set(2.0, 2.35, 1);
     scene.add(hero);
 
-    const enemy = new THREE.Sprite(new THREE.SpriteMaterial({ map: enemyTexture, color: 0xe8f2ff, transparent: true, alphaTest: 0.08 }));
+    const enemy = new THREE.Sprite(new THREE.SpriteMaterial({ map: enemyTexture, color: 0xf6fbff, transparent: true, alphaTest: 0.08 }));
     enemy.position.set(2.45, 1.32, -0.15);
     enemy.scale.set(2.05, 2.4, 1);
     scene.add(enemy);
 
-    const shadowTexture = makeBlobShadow();
-    const shadowMaterial = new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, opacity: 0.72, depthWrite: false });
-    const makeShadow = (x: number, z: number, scale: number) => {
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.7 * scale, 0.84 * scale), shadowMaterial.clone());
+    const blobShadowTexture = makeBlobShadow();
+    const heroSilhouetteTexture = makeSilhouetteShadowTexture(ASSETS.hero);
+    const enemySilhouetteTexture = makeSilhouetteShadowTexture(ASSETS.enemy);
+    const blobShadowMaterial = new THREE.MeshBasicMaterial({ map: blobShadowTexture, transparent: true, opacity: 0.34, depthWrite: false });
+    const makeBlob = (x: number, z: number, scale: number) => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.7 * scale, 0.84 * scale), blobShadowMaterial.clone());
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(x, 0.018, z + 0.22);
       scene.add(mesh);
       return mesh;
     };
-    const heroShadow = makeShadow(-2.25, 0.5, 1.15);
-    const enemyShadow = makeShadow(2.45, -0.15, 1.25);
+    const makeSilhouette = (texture: THREE.Texture, x: number, z: number, scale: number) => {
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.05 * scale, 1.55 * scale),
+        new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.58, depthWrite: false }),
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = -0.1;
+      mesh.position.set(x + 0.28, 0.028, z + 0.58);
+      scene.add(mesh);
+      return mesh;
+    };
+    const heroBlobShadow = makeBlob(-2.25, 0.5, 1.15);
+    const enemyBlobShadow = makeBlob(2.45, -0.15, 1.25);
+    const heroShadow = makeSilhouette(heroSilhouetteTexture, -2.25, 0.5, 1.02);
+    const enemyShadow = makeSilhouette(enemySilhouetteTexture, 2.45, -0.15, 1.08);
 
     const glowTexture = makeGlowTexture();
     const glowMaterial = new THREE.SpriteMaterial({ map: glowTexture, color: 0xffbe56, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -239,6 +307,45 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
       scene.add(sprite);
       return sprite;
     });
+
+    const floorLightTexture = makeGlowTexture([
+      [0, 'rgba(255, 231, 171, 0.9)'],
+      [0.38, 'rgba(255, 205, 113, 0.26)'],
+      [1, 'rgba(255, 205, 113, 0)'],
+    ]);
+    const floorLightMaterial = new THREE.MeshBasicMaterial({
+      map: floorLightTexture,
+      color: 0xffdda0,
+      transparent: true,
+      opacity: 0.24,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const litPatches = [
+      [-2.35, 0.04, 0.7, 2.45, 1.36],
+      [2.35, 0.04, 0.05, 2.18, 1.18],
+      [0.0, 0.04, -2.25, 3.55, 1.75],
+    ].map(([x, y, z, sx, sz]) => {
+      const patch = new THREE.Mesh(new THREE.PlaneGeometry(sx, sz), floorLightMaterial.clone());
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(x, y, z);
+      scene.add(patch);
+      return patch;
+    });
+
+    const makeCharacterBloom = (map: THREE.Texture, color: number, opacity: number) =>
+      new THREE.SpriteMaterial({
+        map,
+        color,
+        transparent: true,
+        opacity,
+        alphaTest: 0.04,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+    const heroBloom = new THREE.Sprite(makeCharacterBloom(heroTexture, 0xffd99a, 0.14));
+    const enemyBloom = new THREE.Sprite(makeCharacterBloom(enemyTexture, 0x8ed0ff, 0.12));
+    scene.add(heroBloom, enemyBloom);
 
     const beamTexture = makeBeamTexture();
     const beamMaterial = new THREE.MeshBasicMaterial({
@@ -284,8 +391,8 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(mount.clientWidth, mount.clientHeight), 0.62, 0.54, 0.18);
-    const bokehPass = new BokehPass(scene, camera, { focus: 13.8, aperture: 0.00042, maxblur: 0.0032 });
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(mount.clientWidth, mount.clientHeight), 0.52, 0.46, 0.14);
+    const bokehPass = new BokehPass(scene, camera, { focus: 13.8, aperture: 0.00026, maxblur: 0.002 });
     const gradePass = new ShaderPass(colorGradeShader);
     composer.addPass(bloomPass);
     composer.addPass(bokehPass);
@@ -309,17 +416,30 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
       enemy.position.y = 1.32 + Math.sin(t * 1.8 + 1.1) * 0.055;
       hero.scale.set(2.0 * layoutRig.heroScale, 2.35 * layoutRig.heroScale, 1);
       enemy.scale.set(2.05 * layoutRig.enemyScale, 2.4 * layoutRig.enemyScale, 1);
-      heroShadow.position.x = layoutRig.heroX;
-      enemyShadow.position.x = layoutRig.enemyX;
-      heroShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.025);
-      enemyShadow.scale.setScalar(1 + Math.sin(t * 1.8 + 1.1) * 0.03);
+      heroBloom.position.copy(hero.position);
+      heroBloom.position.z += 0.012;
+      heroBloom.scale.set(2.14 * layoutRig.heroScale, 2.52 * layoutRig.heroScale, 1);
+      enemyBloom.position.copy(enemy.position);
+      enemyBloom.position.z += 0.012;
+      enemyBloom.scale.set(2.2 * layoutRig.enemyScale, 2.58 * layoutRig.enemyScale, 1);
+      heroBlobShadow.position.x = layoutRig.heroX;
+      enemyBlobShadow.position.x = layoutRig.enemyX;
+      heroShadow.position.x = layoutRig.heroX + 0.28;
+      enemyShadow.position.x = layoutRig.enemyX + 0.28;
+      heroBlobShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.025);
+      enemyBlobShadow.scale.setScalar(1 + Math.sin(t * 1.8 + 1.1) * 0.03);
+      heroShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.018);
+      enemyShadow.scale.setScalar(1 + Math.sin(t * 1.8 + 1.1) * 0.02);
 
       runeGlows.forEach((glow, i) => {
         glow.material.opacity = 0.5 + Math.sin(t * 1.8 + i * 1.7) * 0.16;
         glow.scale.setScalar(0.82 + Math.sin(t * 1.3 + i) * 0.08);
       });
       beams.forEach((beam, i) => {
-        beam.material.opacity = 0.15 + Math.sin(t * 0.8 + i) * 0.045;
+        beam.material.opacity = 0.17 + Math.sin(t * 0.8 + i) * 0.04;
+      });
+      litPatches.forEach((patch, i) => {
+        patch.material.opacity = 0.16 + Math.sin(t * 0.75 + i) * 0.035;
       });
 
       const arr = particleGeometry.attributes.position.array as Float32Array;
@@ -337,15 +457,16 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
     const resize = () => {
       const width = mount.clientWidth;
       const height = mount.clientHeight;
+      if (width <= 0 || height <= 0) return;
       const aspect = width / height;
-      const autoProfile = width <= 1050 || aspect < 1.05 ? 'sp' : 'pc';
+      const autoProfile = width <= 760 || aspect < 0.86 ? 'sp' : 'pc';
       const profile = viewMode === 'auto' ? autoProfile : viewMode;
       const isPhone = profile === 'sp';
-      cameraRig.fov = isPhone ? (aspect < 0.75 ? 78 : 66) : 46;
-      cameraRig.y = isPhone ? 8.55 : 8.0;
-      cameraRig.z = isPhone ? (aspect < 0.75 ? 14.6 : 14.0) : 13.2;
-      cameraRig.targetY = isPhone ? 1.08 : 1.35;
-      cameraRig.targetZ = isPhone ? -2.35 : -2.75;
+      cameraRig.fov = isPhone ? (aspect < 0.75 ? 72 : 62) : Math.min(54, Math.max(42, 48 / Math.sqrt(aspect)));
+      cameraRig.y = isPhone ? 8.35 : 8.35;
+      cameraRig.z = isPhone ? (aspect < 0.75 ? 14.2 : 13.5) : 12.1;
+      cameraRig.targetY = isPhone ? 1.05 : 1.25;
+      cameraRig.targetZ = isPhone ? -2.2 : -2.25;
       layoutRig.heroX = isPhone ? -1.42 : -2.25;
       layoutRig.enemyX = isPhone ? 1.42 : 2.35;
       layoutRig.heroScale = isPhone ? 0.88 : 1;
@@ -353,25 +474,30 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
       camera.fov = cameraRig.fov;
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      bloomPass.strength = isPhone ? 0.36 : 0.56;
-      bloomPass.radius = isPhone ? 0.34 : 0.48;
+      bloomPass.strength = isPhone ? 0.36 : 0.5;
+      bloomPass.radius = isPhone ? 0.36 : 0.44;
+      bloomPass.threshold = isPhone ? 0.14 : 0.15;
       bokehPass.uniforms.focus.value = isPhone ? 14.2 : 13.8;
-      bokehPass.uniforms.aperture.value = isPhone ? 0.0002 : 0.00042;
-      bokehPass.uniforms.maxblur.value = isPhone ? 0.0014 : 0.0032;
-      gradePass.uniforms.saturation.value = isPhone ? 1.02 : 1.1;
-      gradePass.uniforms.warmth.value = isPhone ? -0.02 : -0.012;
-      gradePass.uniforms.vignette.value = isPhone ? 0.16 : 0.24;
-      particleMaterial.size = isPhone ? 0.021 : 0.032;
-      particleMaterial.opacity = isPhone ? 0.22 : 0.48;
-      renderer.setSize(width, height);
+      bokehPass.uniforms.aperture.value = isPhone ? 0.00014 : 0.00026;
+      bokehPass.uniforms.maxblur.value = isPhone ? 0.001 : 0.002;
+      gradePass.uniforms.exposure.value = isPhone ? 1.06 : 1.1;
+      gradePass.uniforms.saturation.value = isPhone ? 1.04 : 1.08;
+      gradePass.uniforms.warmth.value = isPhone ? 0 : 0.006;
+      gradePass.uniforms.vignette.value = isPhone ? 0.12 : 0.2;
+      particleMaterial.size = isPhone ? 0.024 : 0.034;
+      particleMaterial.opacity = isPhone ? 0.3 : 0.5;
+      renderer.setSize(width, height, false);
       composer.setSize(width, height);
     };
     resize();
     window.addEventListener('resize', resize);
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(mount);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
+      resizeObserver.disconnect();
       mount.removeChild(renderer.domElement);
       composer.dispose();
       renderer.dispose();
@@ -382,7 +508,7 @@ function DungeonScene({ viewMode }: { viewMode: ViewMode }) {
           materials.forEach((material) => material.dispose());
         }
       });
-      [floorTexture, backdropTexture, heroTexture, enemyTexture, glowTexture, beamTexture, shadowTexture].forEach((texture) => texture.dispose());
+      [floorTexture, backdropTexture, heroTexture, enemyTexture, glowTexture, beamTexture, blobShadowTexture, heroSilhouetteTexture, enemySilhouetteTexture, floorLightTexture].forEach((texture) => texture.dispose());
     };
   }, [viewMode]);
 
