@@ -11,6 +11,10 @@ import './styles.css';
 const ASSETS = {
   floor: 'assets/dungeon-floor.png',
   backdrop: 'assets/dungeon-backdrop.png',
+  highlandFloor: 'assets/highland-floor-tile.png',
+  highlandSky: 'assets/highland-sky.png',
+  highlandFar: 'assets/highland-far.png',
+  highlandMid: 'assets/highland-mid.png',
   hero: 'assets/hero.png',
   heroSlash: 'assets/hero-slash-sheet.png',
   enemy: 'assets/enemy.png',
@@ -18,7 +22,7 @@ const ASSETS = {
 
 type ViewMode = 'auto' | 'pc' | 'sp';
 type BattleMode = 'idle' | 'slash' | 'thrust';
-type StageId = 'dungeon' | 'sanctum';
+type StageId = 'dungeon' | 'sanctum' | 'highland';
 type ResponsiveProfile = 'pc' | 'sp';
 type Vec3Tuple = [number, number, number];
 
@@ -38,6 +42,19 @@ type StageLayoutProfile = {
   enemyScale: number;
 };
 
+type StagePostProfile = {
+  bloomStrength: number;
+  bloomRadius: number;
+  bloomThreshold: number;
+  focus: number;
+  aperture: number;
+  maxblur: number;
+  exposure: number;
+  saturation: number;
+  warmth: number;
+  vignette: number;
+};
+
 type StageDefinition = {
   id: StageId;
   label: string;
@@ -52,8 +69,15 @@ type StageDefinition = {
   };
   floor: {
     repeat: [number, number];
+    overlay?: {
+      repeat: [number, number];
+      opacity: number;
+    };
+    tint?: number;
     emissive: number;
     emissiveIntensity: number;
+    emissiveMap?: boolean;
+    unlit?: boolean;
     roughness: number;
   };
   backdrop: {
@@ -63,7 +87,8 @@ type StageDefinition = {
   };
   parallax: Array<{
     name: 'sky' | 'far' | 'mid';
-    color: number;
+    asset?: string;
+    color?: number;
     opacity: number;
     position: Vec3Tuple;
     size: [number, number];
@@ -80,6 +105,7 @@ type StageDefinition = {
   };
   camera: Record<ResponsiveProfile, StageCameraProfile>;
   layout: Record<ResponsiveProfile, StageLayoutProfile>;
+  post: Record<ResponsiveProfile, StagePostProfile>;
 };
 
 const BACKDROP_WORLD_HEIGHT = 34;
@@ -102,6 +128,33 @@ const DUNGEON_CAMERA_SP = {
   zoom: 1,
   shake: 0.06,
 };
+
+const DUNGEON_POST = {
+  pc: {
+    bloomStrength: 0.5,
+    bloomRadius: 0.44,
+    bloomThreshold: 0.15,
+    focus: 13.8,
+    aperture: 0.00026,
+    maxblur: 0.002,
+    exposure: 1.1,
+    saturation: 1.08,
+    warmth: 0.006,
+    vignette: 0.2,
+  },
+  sp: {
+    bloomStrength: 0.36,
+    bloomRadius: 0.36,
+    bloomThreshold: 0.14,
+    focus: 14.2,
+    aperture: 0.00014,
+    maxblur: 0.001,
+    exposure: 1.06,
+    saturation: 1.04,
+    warmth: 0,
+    vignette: 0.12,
+  },
+} satisfies Record<ResponsiveProfile, StagePostProfile>;
 
 const STAGES: Record<StageId, StageDefinition> = {
   dungeon: {
@@ -149,6 +202,7 @@ const STAGES: Record<StageId, StageDefinition> = {
       pc: { hero: [-2.25, 1.28, 0.5], enemy: [2.35, 1.32, -0.15], heroScale: 1, enemyScale: 1 },
       sp: { hero: [-1.42, 1.28, 0.5], enemy: [1.42, 1.32, -0.15], heroScale: 0.88, enemyScale: 0.88 },
     },
+    post: DUNGEON_POST,
   },
   sanctum: {
     id: 'sanctum',
@@ -194,6 +248,86 @@ const STAGES: Record<StageId, StageDefinition> = {
     layout: {
       pc: { hero: [-2.05, 1.32, 0.58], enemy: [2.18, 1.35, -0.12], heroScale: 1.02, enemyScale: 1 },
       sp: { hero: [-1.32, 1.3, 0.58], enemy: [1.34, 1.34, -0.12], heroScale: 0.88, enemyScale: 0.88 },
+    },
+    post: {
+      pc: { ...DUNGEON_POST.pc, bloomStrength: 0.58, bloomRadius: 0.48, exposure: 1.08, saturation: 1.1, warmth: 0.018, vignette: 0.24 },
+      sp: { ...DUNGEON_POST.sp, bloomStrength: 0.42, exposure: 1.04, saturation: 1.06, warmth: 0.01, vignette: 0.16 },
+    },
+  },
+  highland: {
+    id: 'highland',
+    label: 'Highland',
+    assets: {
+      floor: ASSETS.highlandFloor,
+      backdrop: ASSETS.highlandMid,
+    },
+    world: {
+      background: 0xbfe8ff,
+      fog: 0xcfe8dd,
+      fogDensity: 0.015,
+    },
+    floor: {
+      repeat: [4.5, 3.25],
+      overlay: { repeat: [2.15, 1.7], opacity: 0.13 },
+      tint: 0xd8f0cf,
+      emissive: 0x365b3e,
+      emissiveIntensity: 0.24,
+      emissiveMap: true,
+      unlit: true,
+      roughness: 0.88,
+    },
+    backdrop: {
+      position: [0, 5.1, -9.2],
+      height: 31,
+      opacity: 0,
+    },
+    parallax: [
+      { name: 'sky', asset: ASSETS.highlandSky, opacity: 1, position: [0, 9.25, -14.2], size: [45.0, 25.3], drift: 0.006 },
+      { name: 'far', asset: ASSETS.highlandFar, opacity: 0.91, position: [0, 5.45, -10.2], size: [29.35, 16.5], drift: 0.018 },
+      { name: 'mid', asset: ASSETS.highlandMid, opacity: 0.94, position: [0, 4.05, -7.05], size: [22.2, 12.5], drift: 0.036 },
+    ],
+    lights: {
+      hemiSky: 0xf3fff9,
+      hemiGround: 0x243c34,
+      hemiIntensity: 1.92,
+      key: { color: 0xf5ffe4, intensity: 4.1, position: [-6.4, 12.8, -5.1] },
+      point: { color: 0xd6f4d0, intensity: 1.15, distance: 15, decay: 1.7, position: [-4.2, 3.9, -2.1] },
+      hero: { color: 0xf6fff2, intensity: 1.62, distance: 6.6, decay: 1.18, position: [-3.1, 3.55, 1.02] },
+      enemy: { color: 0xf1fffb, intensity: 1.55, distance: 6.4, decay: 1.2, position: [2.75, 3.45, 0.62] },
+    },
+    camera: {
+      pc: { fov: (aspect: number) => Math.min(41, Math.max(30, 37 / Math.sqrt(aspect))), position: [0, 7.55, 10.15], target: [0, 2.22, -2.82], idleSway: [0.2, 0.09, 0], zoom: 1.02, shake: 0.07 },
+      sp: { fov: (aspect: number) => (aspect < 0.75 ? 68 : 59), position: [0, 7.85, 12.25], target: [0, 1.82, -2.6], idleSway: [0.15, 0.07, 0], zoom: 1.01, shake: 0.055 },
+    },
+    layout: {
+      pc: { hero: [-2.45, 1.58, 0.6], enemy: [2.55, 1.62, -0.05], heroScale: 1, enemyScale: 1 },
+      sp: { hero: [-1.48, 1.48, 0.62], enemy: [1.5, 1.52, -0.06], heroScale: 0.88, enemyScale: 0.88 },
+    },
+    post: {
+      pc: {
+        bloomStrength: 0.22,
+        bloomRadius: 0.26,
+        bloomThreshold: 0.28,
+        focus: 15.2,
+        aperture: 0.00004,
+        maxblur: 0.00025,
+        exposure: 1.04,
+        saturation: 1.02,
+        warmth: -0.006,
+        vignette: 0.1,
+      },
+      sp: {
+        bloomStrength: 0.18,
+        bloomRadius: 0.24,
+        bloomThreshold: 0.3,
+        focus: 15.4,
+        aperture: 0.00003,
+        maxblur: 0.0002,
+        exposure: 1.0,
+        saturation: 1.0,
+        warmth: -0.004,
+        vignette: 0.08,
+      },
     },
   },
 };
@@ -245,6 +379,17 @@ function fitBackdropToTexture(backdrop: THREE.Mesh<THREE.PlaneGeometry, THREE.Me
   const nextGeometry = new THREE.PlaneGeometry(BACKDROP_WORLD_HEIGHT * (width / height), BACKDROP_WORLD_HEIGHT);
   backdrop.geometry.dispose();
   backdrop.geometry = nextGeometry;
+}
+
+function getShadowProjection(lightPosition: Vec3Tuple) {
+  const xzLength = Math.hypot(lightPosition[0], lightPosition[2]) || 1;
+  const offsetX = (-lightPosition[0] / xzLength) * 0.64;
+  const offsetZ = (-lightPosition[2] / xzLength) * 0.64;
+  return {
+    x: offsetX,
+    z: offsetZ,
+    rotation: -0.1 + offsetX * 0.08,
+  };
 }
 
 const colorGradeShader = {
@@ -317,6 +462,105 @@ function makeBeamTexture() {
   gradient.addColorStop(1, 'rgba(210, 232, 255, 0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 128, 512);
+  return new THREE.CanvasTexture(canvas);
+}
+
+function makeForestBeamTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 192;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+  const column = ctx.createLinearGradient(0, 0, 192, 0);
+  column.addColorStop(0, 'rgba(221, 255, 225, 0)');
+  column.addColorStop(0.24, 'rgba(226, 255, 218, 0.1)');
+  column.addColorStop(0.44, 'rgba(249, 255, 210, 0.5)');
+  column.addColorStop(0.52, 'rgba(255, 255, 224, 0.68)');
+  column.addColorStop(0.62, 'rgba(231, 255, 219, 0.28)');
+  column.addColorStop(1, 'rgba(221, 255, 225, 0)');
+  ctx.fillStyle = column;
+  ctx.fillRect(0, 0, 192, 512);
+
+  const fade = ctx.createLinearGradient(0, 0, 0, 512);
+  fade.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  fade.addColorStop(0.12, 'rgba(0, 0, 0, 0.78)');
+  fade.addColorStop(0.72, 'rgba(0, 0, 0, 0.92)');
+  fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, 192, 512);
+  ctx.globalCompositeOperation = 'source-over';
+  return new THREE.CanvasTexture(canvas);
+}
+
+function makeForestSkirtTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  const vertical = ctx.createLinearGradient(0, 0, 0, 256);
+  vertical.addColorStop(0, 'rgba(21, 45, 36, 0)');
+  vertical.addColorStop(0.34, 'rgba(31, 68, 51, 0.12)');
+  vertical.addColorStop(0.62, 'rgba(18, 37, 27, 0.34)');
+  vertical.addColorStop(0.86, 'rgba(8, 18, 13, 0.28)');
+  vertical.addColorStop(1, 'rgba(8, 18, 13, 0)');
+  ctx.fillStyle = vertical;
+  ctx.fillRect(0, 0, 1024, 256);
+
+  const mist = ctx.createLinearGradient(0, 0, 1024, 0);
+  mist.addColorStop(0, 'rgba(181, 235, 219, 0.02)');
+  mist.addColorStop(0.28, 'rgba(206, 246, 226, 0.08)');
+  mist.addColorStop(0.55, 'rgba(219, 249, 231, 0.06)');
+  mist.addColorStop(0.78, 'rgba(194, 238, 219, 0.07)');
+  mist.addColorStop(1, 'rgba(181, 235, 219, 0.02)');
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, 46, 1024, 120);
+
+  for (let i = 0; i < 90; i += 1) {
+    const x = Math.random() * 1024;
+    const y = 118 + Math.random() * 86;
+    const w = 18 + Math.random() * 48;
+    const h = 10 + Math.random() * 28;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, w);
+    g.addColorStop(0, `rgba(${42 + Math.random() * 30}, ${88 + Math.random() * 42}, ${42 + Math.random() * 25}, ${0.08 + Math.random() * 0.1})`);
+    g.addColorStop(1, 'rgba(23, 48, 30, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x, y, w, h, Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return new THREE.CanvasTexture(canvas);
+}
+
+function makeForestDepthMistTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const vertical = ctx.createLinearGradient(0, 0, 0, 512);
+  vertical.addColorStop(0, 'rgba(188, 235, 226, 0.04)');
+  vertical.addColorStop(0.28, 'rgba(202, 241, 226, 0.14)');
+  vertical.addColorStop(0.58, 'rgba(214, 247, 229, 0.22)');
+  vertical.addColorStop(0.82, 'rgba(174, 224, 209, 0.16)');
+  vertical.addColorStop(1, 'rgba(132, 182, 174, 0.02)');
+  ctx.fillStyle = vertical;
+  ctx.fillRect(0, 0, 1024, 512);
+
+  for (let i = 0; i < 44; i += 1) {
+    const x = Math.random() * 1024;
+    const y = 80 + Math.random() * 350;
+    const radius = 90 + Math.random() * 180;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    g.addColorStop(0, `rgba(218, 248, 232, ${0.04 + Math.random() * 0.08})`);
+    g.addColorStop(1, 'rgba(218, 248, 232, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius * 1.6, radius * 0.46, Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   return new THREE.CanvasTexture(canvas);
 }
 
@@ -457,41 +701,62 @@ function makeShockRingTexture() {
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
-  ctx.translate(256, 256);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  const soft = ctx.createRadialGradient(0, 0, 18, 0, 0, 228);
+  const soft = ctx.createRadialGradient(240, 260, 24, 240, 260, 230);
   soft.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  soft.addColorStop(0.48, 'rgba(118, 214, 255, 0)');
-  soft.addColorStop(0.62, 'rgba(168, 235, 255, 0.14)');
-  soft.addColorStop(0.76, 'rgba(255, 228, 144, 0.08)');
+  soft.addColorStop(0.34, 'rgba(170, 238, 255, 0.1)');
+  soft.addColorStop(0.68, 'rgba(180, 243, 255, 0.08)');
   soft.addColorStop(1, 'rgba(118, 214, 255, 0)');
   ctx.fillStyle = soft;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 226, 92, 0, 0, Math.PI * 2);
+  ctx.ellipse(238, 266, 214, 170, -0.1, 0, Math.PI * 2);
   ctx.fill();
 
-  const drawBrokenEllipse = (radiusX: number, radiusY: number, width: number, alpha: number, offset = 0) => {
-    const gradient = ctx.createLinearGradient(-radiusX, 0, radiusX, 0);
-    gradient.addColorStop(0, 'rgba(130, 219, 255, 0)');
-    gradient.addColorStop(0.34, `rgba(211, 248, 255, ${alpha})`);
-    gradient.addColorStop(0.54, `rgba(255, 236, 166, ${alpha * 0.72})`);
-    gradient.addColorStop(1, 'rgba(130, 219, 255, 0)');
+  const drawBoom = (offsetX: number, offsetY: number, width: number, alpha: number) => {
+    const gradient = ctx.createLinearGradient(96, 108, 414, 404);
+    gradient.addColorStop(0, 'rgba(157, 236, 255, 0)');
+    gradient.addColorStop(0.26, `rgba(223, 251, 255, ${alpha * 0.9})`);
+    gradient.addColorStop(0.56, `rgba(255, 244, 196, ${alpha})`);
+    gradient.addColorStop(0.82, `rgba(180, 242, 255, ${alpha * 0.52})`);
+    gradient.addColorStop(1, 'rgba(157, 236, 255, 0)');
     ctx.strokeStyle = gradient;
     ctx.lineWidth = width;
-    ctx.setLineDash([]);
     ctx.beginPath();
-    ctx.ellipse(0, 0, radiusX, radiusY, 0, Math.PI * 0.12 + offset, Math.PI * 0.88 + offset);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, radiusX, radiusY, 0, Math.PI * 1.12 + offset, Math.PI * 1.88 + offset);
+    ctx.moveTo(282 + offsetX, 78 + offsetY);
+    ctx.bezierCurveTo(142 + offsetX, 62 + offsetY, 90 + offsetX, 216 + offsetY, 138 + offsetX, 318 + offsetY);
+    ctx.bezierCurveTo(188 + offsetX, 426 + offsetY, 334 + offsetX, 424 + offsetY, 356 + offsetX, 322 + offsetY);
+    ctx.bezierCurveTo(376 + offsetX, 226 + offsetY, 256 + offsetX, 206 + offsetY, 224 + offsetX, 280 + offsetY);
     ctx.stroke();
   };
 
-  drawBrokenEllipse(184, 74, 14, 1);
-  drawBrokenEllipse(218, 92, 8, 0.62, 0.03);
-  drawBrokenEllipse(142, 54, 6, 0.48, -0.04);
+  drawBoom(0, 0, 34, 0.7);
+  ctx.globalCompositeOperation = 'lighter';
+  drawBoom(8, -4, 16, 0.92);
+  drawBoom(-20, 20, 8, 0.34);
+
+  const tail = ctx.createLinearGradient(176, 288, 464, 236);
+  tail.addColorStop(0, 'rgba(190, 246, 255, 0)');
+  tail.addColorStop(0.34, 'rgba(245, 255, 255, 0.82)');
+  tail.addColorStop(0.68, 'rgba(188, 241, 255, 0.35)');
+  tail.addColorStop(1, 'rgba(150, 224, 255, 0)');
+  ctx.strokeStyle = tail;
+  ctx.lineWidth = 13;
+  ctx.beginPath();
+  ctx.moveTo(208, 292);
+  ctx.bezierCurveTo(292, 246, 366, 248, 466, 216);
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.48)';
+  ctx.lineWidth = 16;
+  ctx.beginPath();
+  ctx.moveTo(258, 118);
+  ctx.bezierCurveTo(154, 130, 130, 238, 168, 312);
+  ctx.bezierCurveTo(210, 388, 318, 382, 330, 316);
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'source-over';
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -500,31 +765,59 @@ function makeShockRingTexture() {
 
 function makeVortexTexture() {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
+  canvas.width = 1024;
+  canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
-  ctx.translate(256, 256);
   ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
 
-  for (let arm = 0; arm < 4; arm += 1) {
-    const gradient = ctx.createLinearGradient(-210, -20, 210, 20);
-    gradient.addColorStop(0, 'rgba(122, 210, 255, 0)');
-    gradient.addColorStop(0.45, arm % 2 === 0 ? 'rgba(198, 240, 255, 0.34)' : 'rgba(255, 232, 157, 0.24)');
-    gradient.addColorStop(1, 'rgba(122, 210, 255, 0)');
+  const drawRibbon = (phase: number, lift: number, width: number, alpha: number, warm = false) => {
+    const gradient = ctx.createLinearGradient(34, 0, 990, 0);
+    gradient.addColorStop(0, 'rgba(138, 221, 255, 0)');
+    gradient.addColorStop(0.18, `rgba(212, 247, 255, ${alpha * 0.56})`);
+    gradient.addColorStop(0.48, warm ? `rgba(255, 238, 174, ${alpha})` : `rgba(238, 255, 255, ${alpha})`);
+    gradient.addColorStop(0.74, `rgba(184, 239, 255, ${alpha * 0.48})`);
+    gradient.addColorStop(1, 'rgba(138, 221, 255, 0)');
     ctx.strokeStyle = gradient;
-    ctx.lineWidth = 8 - arm;
+    ctx.lineWidth = width;
     ctx.beginPath();
-    for (let i = 0; i <= 72; i += 1) {
-      const p = i / 72;
-      const angle = arm * Math.PI * 0.5 + p * Math.PI * 1.55;
-      const radius = 24 + p * 196;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius * 0.38;
+    for (let i = 0; i <= 112; i += 1) {
+      const p = i / 112;
+      const x = 44 + p * 936;
+      const envelope = Math.sin(p * Math.PI);
+      const wave = Math.sin(p * Math.PI * 4.8 + phase);
+      const y = 128 + lift + wave * 42 * envelope;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
-  }
+
+    ctx.lineWidth = Math.max(1.5, width * 0.38);
+    ctx.beginPath();
+    for (let i = 0; i <= 112; i += 1) {
+      const p = i / 112;
+      const x = 44 + p * 936;
+      const envelope = Math.sin(p * Math.PI);
+      const wave = Math.sin(p * Math.PI * 4.8 + phase + Math.PI);
+      const y = 128 + lift + wave * 24 * envelope;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+
+  drawRibbon(0.1, -18, 10, 0.24);
+  drawRibbon(1.75, 8, 6, 0.34, true);
+  drawRibbon(3.25, 24, 4, 0.18);
+
+  ctx.globalCompositeOperation = 'destination-out';
+  const fade = ctx.createLinearGradient(0, 0, 1024, 0);
+  fade.addColorStop(0, 'rgba(0, 0, 0, 1)');
+  fade.addColorStop(0.12, 'rgba(0, 0, 0, 0)');
+  fade.addColorStop(0.88, 'rgba(0, 0, 0, 0)');
+  fade.addColorStop(1, 'rgba(0, 0, 0, 1)');
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, 1024, 256);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -728,19 +1021,49 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     floorTexture.repeat.set(stage.floor.repeat[0], stage.floor.repeat[1]);
     floorTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(96, 64, 160, 120),
-      new THREE.MeshStandardMaterial({
+    const floorMaterial = stage.floor.unlit
+      ? new THREE.MeshBasicMaterial({
+          map: floorTexture,
+          color: stage.floor.tint ?? 0xffffff,
+        })
+      : new THREE.MeshStandardMaterial({
         map: floorTexture,
+        color: stage.floor.tint ?? 0xffffff,
         roughness: stage.floor.roughness,
         metalness: 0.02,
         emissive: new THREE.Color(stage.floor.emissive),
+        emissiveMap: stage.floor.emissiveMap ? floorTexture : null,
         emissiveIntensity: stage.floor.emissiveIntensity,
-      }),
-    );
+      });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(96, 64, 160, 120), floorMaterial);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
+
+    const floorOverlayTexture = stage.floor.overlay ? loader.load(stage.assets.floor) : null;
+    if (floorOverlayTexture) {
+      floorOverlayTexture.colorSpace = THREE.SRGBColorSpace;
+      floorOverlayTexture.wrapS = THREE.RepeatWrapping;
+      floorOverlayTexture.wrapT = THREE.RepeatWrapping;
+      floorOverlayTexture.repeat.set(stage.floor.overlay!.repeat[0], stage.floor.overlay!.repeat[1]);
+      floorOverlayTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    }
+    const floorOverlay = floorOverlayTexture && stage.floor.overlay
+      ? new THREE.Mesh(
+          new THREE.PlaneGeometry(96, 64, 48, 36),
+          new THREE.MeshBasicMaterial({
+            map: floorOverlayTexture,
+            transparent: true,
+            opacity: stage.floor.overlay.opacity,
+            depthWrite: false,
+          }),
+        )
+      : null;
+    if (floorOverlay) {
+      floorOverlay.rotation.x = -Math.PI / 2;
+      floorOverlay.position.y = 0.032;
+      scene.add(floorOverlay);
+    }
 
     let backdrop: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
     const backdropTexture = loader.load(stage.assets.backdrop, (texture) => {
@@ -749,20 +1072,72 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     backdropTexture.colorSpace = THREE.SRGBColorSpace;
     backdrop = new THREE.Mesh(
       new THREE.PlaneGeometry(stage.backdrop.height * BACKDROP_FALLBACK_ASPECT, stage.backdrop.height),
-      new THREE.MeshBasicMaterial({ map: backdropTexture, transparent: true, opacity: stage.backdrop.opacity }),
+      new THREE.MeshBasicMaterial({ map: backdropTexture, transparent: true, opacity: stage.backdrop.opacity, depthWrite: false }),
     );
     setVec3(backdrop.position, stage.backdrop.position);
     scene.add(backdrop);
 
+    const parallaxTextures: THREE.Texture[] = [];
     const parallaxLayers = stage.parallax.map((layer) => {
+      const texture = layer.asset ? loader.load(layer.asset) : null;
+      if (texture) {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        parallaxTextures.push(texture);
+      }
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(layer.size[0], layer.size[1]),
-        new THREE.MeshBasicMaterial({ color: layer.color, transparent: true, opacity: layer.opacity, depthWrite: false }),
+        new THREE.MeshBasicMaterial({
+          map: texture,
+          color: layer.color ?? 0xffffff,
+          transparent: true,
+          opacity: layer.opacity,
+          depthWrite: false,
+        }),
       );
       setVec3(mesh.position, layer.position);
       scene.add(mesh);
       return { mesh, config: layer };
     });
+
+    const forestSkirtTexture = stage.id === 'highland' ? makeForestSkirtTexture() : null;
+    const forestSkirt = forestSkirtTexture
+      ? new THREE.Mesh(
+          new THREE.PlaneGeometry(30, 2.05),
+          new THREE.MeshBasicMaterial({
+            map: forestSkirtTexture,
+            transparent: true,
+            opacity: 0.62,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          }),
+        )
+      : null;
+    if (forestSkirt) {
+      forestSkirt.position.set(0, 0.52, -6.05);
+      forestSkirt.rotation.x = -0.04;
+      scene.add(forestSkirt);
+    }
+
+    const forestDepthMistTexture = stage.id === 'highland' ? makeForestDepthMistTexture() : null;
+    const forestDepthMist = forestDepthMistTexture
+      ? new THREE.Mesh(
+          new THREE.PlaneGeometry(23.8, 9.2),
+          new THREE.MeshBasicMaterial({
+            map: forestDepthMistTexture,
+            transparent: true,
+            opacity: 0.58,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          }),
+        )
+      : null;
+    if (forestDepthMist) {
+      forestDepthMist.position.set(0, 4.22, -6.94);
+      scene.add(forestDepthMist);
+    }
 
     const ambient = new THREE.HemisphereLight(stage.lights.hemiSky, stage.lights.hemiGround, stage.lights.hemiIntensity);
     scene.add(ambient);
@@ -815,6 +1190,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     const blobShadowTexture = makeBlobShadow();
     const heroSilhouetteTexture = makeSilhouetteShadowTexture(ASSETS.hero);
     const enemySilhouetteTexture = makeSilhouetteShadowTexture(ASSETS.enemy);
+    const shadowProjection = getShadowProjection(stage.lights.key.position);
     const blobShadowMaterial = new THREE.MeshBasicMaterial({ map: blobShadowTexture, transparent: true, opacity: 0.34, depthWrite: false });
     const makeBlob = (x: number, z: number, scale: number) => {
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.7 * scale, 0.84 * scale), blobShadowMaterial.clone());
@@ -829,8 +1205,8 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.58, depthWrite: false }),
       );
       mesh.rotation.x = -Math.PI / 2;
-      mesh.rotation.z = -0.1;
-      mesh.position.set(x + 0.28, 0.028, z + 0.58);
+      mesh.rotation.z = shadowProjection.rotation;
+      mesh.position.set(x + shadowProjection.x, 0.028, z + shadowProjection.z);
       scene.add(mesh);
       return mesh;
     };
@@ -838,9 +1214,19 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     const enemyBlobShadow = makeBlob(layoutRig.enemyX, layoutRig.enemyZ, 1.25);
     const heroShadow = makeSilhouette(heroSilhouetteTexture, layoutRig.heroX, layoutRig.heroZ, 1.02);
     const enemyShadow = makeSilhouette(enemySilhouetteTexture, layoutRig.enemyX, layoutRig.enemyZ, 1.08);
+    heroShadow.rotation.z = shadowProjection.rotation;
+    enemyShadow.rotation.z = shadowProjection.rotation;
 
+    const isHighland = stage.id === 'highland';
     const glowTexture = makeGlowTexture();
-    const glowMaterial = new THREE.SpriteMaterial({ map: glowTexture, color: 0xffbe56, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending, depthWrite: false });
+    const glowMaterial = new THREE.SpriteMaterial({
+      map: glowTexture,
+      color: isHighland ? 0xd7f6be : 0xffbe56,
+      transparent: true,
+      opacity: isHighland ? 0 : 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
     const runeGlows = [
       [-4.2, 0.08, 3.0, 1.0],
       [1.15, 0.08, 1.95, 0.7],
@@ -854,16 +1240,24 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       return sprite;
     });
 
-    const floorLightTexture = makeGlowTexture([
-      [0, 'rgba(255, 231, 171, 0.9)'],
-      [0.38, 'rgba(255, 205, 113, 0.26)'],
-      [1, 'rgba(255, 205, 113, 0)'],
-    ]);
+    const floorLightTexture = makeGlowTexture(
+      isHighland
+        ? [
+            [0, 'rgba(219, 255, 199, 0.74)'],
+            [0.42, 'rgba(174, 226, 167, 0.2)'],
+            [1, 'rgba(174, 226, 167, 0)'],
+          ]
+        : [
+            [0, 'rgba(255, 231, 171, 0.9)'],
+            [0.38, 'rgba(255, 205, 113, 0.26)'],
+            [1, 'rgba(255, 205, 113, 0)'],
+          ],
+    );
     const floorLightMaterial = new THREE.MeshBasicMaterial({
       map: floorLightTexture,
-      color: 0xffdda0,
+      color: isHighland ? 0xdaf6c4 : 0xffdda0,
       transparent: true,
-      opacity: 0.24,
+      opacity: isHighland ? 0.18 : 0.24,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -889,26 +1283,47 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
-    const heroBloom = new THREE.Sprite(makeCharacterBloom(heroTexture, 0xffd99a, 0.14));
-    const enemyBloom = new THREE.Sprite(makeCharacterBloom(enemyTexture, 0x8ed0ff, 0.12));
+    const heroBloom = new THREE.Sprite(makeCharacterBloom(heroTexture, isHighland ? 0xfafff0 : 0xffd99a, isHighland ? 0.13 : 0.14));
+    const enemyBloom = new THREE.Sprite(makeCharacterBloom(enemyTexture, isHighland ? 0xf2fffb : 0x8ed0ff, isHighland ? 0.12 : 0.12));
+    const heroDayRim = isHighland ? new THREE.Sprite(makeCharacterBloom(heroTexture, 0xffffff, 0.075)) : null;
+    const enemyDayRim = isHighland ? new THREE.Sprite(makeCharacterBloom(enemyTexture, 0xf8fffb, 0.07)) : null;
     scene.add(heroBloom, enemyBloom);
+    if (heroDayRim && enemyDayRim) {
+      scene.add(heroDayRim, enemyDayRim);
+    }
 
-    const beamTexture = makeBeamTexture();
+    const beamTexture = isHighland ? makeForestBeamTexture() : makeBeamTexture();
     const beamMaterial = new THREE.MeshBasicMaterial({
       map: beamTexture,
-      color: 0xffefc2,
+      color: isHighland ? 0xf1ffe1 : 0xffefc2,
       transparent: true,
-      opacity: 0.34,
+      opacity: isHighland ? 0.78 : 0.34,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       depthTest: false,
       side: THREE.DoubleSide,
     });
-    const beams = [-3.2, 0.6, 3.7].map((x, index) => {
-      const beam = new THREE.Mesh(new THREE.PlaneGeometry(1.0 + index * 0.28, 8.5), beamMaterial.clone());
-      beam.position.set(x, 4.1, -2.8 - index * 0.8);
-      beam.rotation.z = -0.28;
-      beam.rotation.y = 0.18;
+    const beamLayout = isHighland
+      ? [
+          { x: -4.8, y: 4.45, z: -3.2, width: 1.45, height: 9.6, rz: -0.34, ry: 0.18 },
+          { x: -2.1, y: 4.3, z: -3.7, width: 1.05, height: 8.8, rz: -0.29, ry: 0.14 },
+          { x: 0.7, y: 4.15, z: -4.05, width: 1.35, height: 9.4, rz: -0.25, ry: 0.1 },
+          { x: 3.15, y: 4.0, z: -3.55, width: 1.0, height: 8.4, rz: -0.2, ry: 0.08 },
+        ]
+      : [-3.2, 0.6, 3.7].map((x, index) => ({
+          x,
+          y: 4.1,
+          z: -2.8 - index * 0.8,
+          width: 1.0 + index * 0.28,
+          height: 8.5,
+          rz: -0.28,
+          ry: 0.18,
+        }));
+    const beams = beamLayout.map((layer) => {
+      const beam = new THREE.Mesh(new THREE.PlaneGeometry(layer.width, layer.height), beamMaterial.clone());
+      beam.position.set(layer.x, layer.y, layer.z);
+      beam.rotation.z = layer.rz;
+      beam.rotation.y = layer.ry;
       scene.add(beam);
       return beam;
     });
@@ -1164,22 +1579,23 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     scene.add(smoke);
 
     const particleGeometry = new THREE.BufferGeometry();
-    const particleCount = 440;
+    const particleCount = isHighland ? 180 : 440;
     const positions = new Float32Array(particleCount * 3);
     const speeds = new Float32Array(particleCount);
     for (let i = 0; i < particleCount; i += 1) {
-      positions[i * 3] = (Math.random() - 0.5) * 13;
-      positions[i * 3 + 1] = Math.random() * 5.5 + 0.2;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 9 - 1.2;
-      speeds[i] = Math.random() * 0.18 + 0.04;
+      positions[i * 3] = (Math.random() - 0.5) * (isHighland ? 15 : 13);
+      positions[i * 3 + 1] = isHighland ? Math.random() * 2.7 + 1.1 : Math.random() * 5.5 + 0.2;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * (isHighland ? 8 : 9) - 1.2;
+      speeds[i] = Math.random() * (isHighland ? 0.08 : 0.18) + (isHighland ? 0.015 : 0.04);
     }
     particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const particleMaterial = new THREE.PointsMaterial({
-      color: 0xffd887,
-      size: 0.032,
+      map: isHighland ? smokeTexture : null,
+      color: isHighland ? 0xdff6ee : 0xffd887,
+      size: isHighland ? 0.34 : 0.032,
       transparent: true,
-      opacity: 0.52,
-      blending: THREE.AdditiveBlending,
+      opacity: isHighland ? 0.16 : 0.52,
+      blending: isHighland ? THREE.NormalBlending : THREE.AdditiveBlending,
       depthWrite: false,
     });
     const particles = new THREE.Points(particleGeometry, particleMaterial);
@@ -1187,8 +1603,15 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(initialSize.width, initialSize.height), 0.52, 0.46, 0.14);
-    const bokehPass = new BokehPass(scene, camera, { focus: 13.8, aperture: 0.00026, maxblur: 0.002 });
+    const initialPostProfile = getProfile(viewMode, initialSize.width, initialSize.width / initialSize.height);
+    const initialPost = stage.post[initialPostProfile];
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(initialSize.width, initialSize.height),
+      initialPost.bloomStrength,
+      initialPost.bloomRadius,
+      initialPost.bloomThreshold,
+    );
+    const bokehPass = new BokehPass(scene, camera, { focus: initialPost.focus, aperture: initialPost.aperture, maxblur: initialPost.maxblur });
     const gradePass = new ShaderPass(colorGradeShader);
     composer.addPass(bloomPass);
     composer.addPass(bokehPass);
@@ -1270,6 +1693,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       const recoil = isBattleActive ? pulseWindow(combatCycle, 0.48, 0.8) : 0;
 
       floorTexture.offset.set(Math.sin(t * 0.06) * 0.006, Math.cos(t * 0.05) * 0.005);
+      floorOverlayTexture?.offset.set(0.34 + Math.sin(t * 0.035) * 0.004, 0.19 + Math.cos(t * 0.04) * 0.004);
       const battleShake = isBattleActive ? hitBurst * cameraRig.shake : 0;
       const shakeX = (Math.sin(t * 54.1) + Math.sin(t * 31.7)) * 0.5 * battleShake;
       const shakeY = Math.sin(t * 45.3) * battleShake * 0.55;
@@ -1309,14 +1733,26 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       enemyBloom.position.copy(enemy.position);
       enemyBloom.position.z += 0.012;
       enemyBloom.scale.set(2.2 * layoutRig.enemyScale, 2.58 * layoutRig.enemyScale, 1);
+      if (heroDayRim && enemyDayRim) {
+        heroDayRim.position.copy(hero.position);
+        heroDayRim.position.x -= 0.035 * layoutRig.heroScale;
+        heroDayRim.position.y += 0.075 * layoutRig.heroScale;
+        heroDayRim.position.z += 0.018;
+        heroDayRim.scale.set(2.18 * layoutRig.heroScale * heroCombatScale, 2.56 * layoutRig.heroScale * heroCombatScale, 1);
+        enemyDayRim.position.copy(enemy.position);
+        enemyDayRim.position.x -= 0.032 * layoutRig.enemyScale;
+        enemyDayRim.position.y += 0.065 * layoutRig.enemyScale;
+        enemyDayRim.position.z += 0.018;
+        enemyDayRim.scale.set(2.14 * layoutRig.enemyScale, 2.5 * layoutRig.enemyScale, 1);
+      }
       heroBlobShadow.position.x = hero.position.x;
       enemyBlobShadow.position.x = layoutRig.enemyX;
-      heroShadow.position.x = hero.position.x + 0.28;
-      enemyShadow.position.x = layoutRig.enemyX + 0.28;
+      heroShadow.position.x = hero.position.x + shadowProjection.x;
+      enemyShadow.position.x = layoutRig.enemyX + shadowProjection.x;
       heroBlobShadow.position.z = layoutRig.heroZ + 0.22;
       enemyBlobShadow.position.z = layoutRig.enemyZ + 0.22;
-      heroShadow.position.z = layoutRig.heroZ + 0.58;
-      enemyShadow.position.z = layoutRig.enemyZ + 0.58;
+      heroShadow.position.z = layoutRig.heroZ + shadowProjection.z;
+      enemyShadow.position.z = layoutRig.enemyZ + shadowProjection.z;
       heroBlobShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.025);
       enemyBlobShadow.scale.setScalar(1 + Math.sin(t * 1.8 + 1.1) * 0.03);
       heroShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.018);
@@ -1510,9 +1946,16 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
 
       const arr = particleGeometry.attributes.position.array as Float32Array;
       for (let i = 0; i < particleCount; i += 1) {
-        arr[i * 3 + 1] -= speeds[i] * 0.012;
-        arr[i * 3] += Math.sin(t + i) * 0.0009;
-        if (arr[i * 3 + 1] < 0.1) arr[i * 3 + 1] = 5.8;
+        if (isHighland) {
+          arr[i * 3] += speeds[i] * 0.018 + Math.sin(t * 0.42 + i) * 0.0015;
+          arr[i * 3 + 1] += Math.sin(t * 0.28 + i * 0.37) * 0.0008;
+          arr[i * 3 + 2] += Math.cos(t * 0.22 + i) * 0.0009;
+          if (arr[i * 3] > 7.6) arr[i * 3] = -7.6;
+        } else {
+          arr[i * 3 + 1] -= speeds[i] * 0.012;
+          arr[i * 3] += Math.sin(t + i) * 0.0009;
+          if (arr[i * 3 + 1] < 0.1) arr[i * 3 + 1] = 5.8;
+        }
       }
       particleGeometry.attributes.position.needsUpdate = true;
 
@@ -1551,18 +1994,19 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       camera.fov = cameraRig.fov;
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      bloomPass.strength = isPhone ? 0.36 : 0.5;
-      bloomPass.radius = isPhone ? 0.36 : 0.44;
-      bloomPass.threshold = isPhone ? 0.14 : 0.15;
-      bokehPass.uniforms.focus.value = isPhone ? 14.2 : 13.8;
-      bokehPass.uniforms.aperture.value = isPhone ? 0.00014 : 0.00026;
-      bokehPass.uniforms.maxblur.value = isPhone ? 0.001 : 0.002;
-      gradePass.uniforms.exposure.value = isPhone ? 1.06 : 1.1;
-      gradePass.uniforms.saturation.value = isPhone ? 1.04 : 1.08;
-      gradePass.uniforms.warmth.value = isPhone ? 0 : 0.006;
-      gradePass.uniforms.vignette.value = isPhone ? 0.12 : 0.2;
-      particleMaterial.size = isPhone ? 0.024 : 0.034;
-      particleMaterial.opacity = isPhone ? 0.3 : 0.5;
+      const post = stage.post[profile];
+      bloomPass.strength = post.bloomStrength;
+      bloomPass.radius = post.bloomRadius;
+      bloomPass.threshold = post.bloomThreshold;
+      bokehPass.uniforms.focus.value = post.focus;
+      bokehPass.uniforms.aperture.value = post.aperture;
+      bokehPass.uniforms.maxblur.value = post.maxblur;
+      gradePass.uniforms.exposure.value = post.exposure;
+      gradePass.uniforms.saturation.value = post.saturation;
+      gradePass.uniforms.warmth.value = post.warmth;
+      gradePass.uniforms.vignette.value = post.vignette;
+      particleMaterial.size = isHighland ? (isPhone ? 0.26 : 0.36) : (isPhone ? 0.024 : 0.034);
+      particleMaterial.opacity = isHighland ? (isPhone ? 0.12 : 0.16) : (isPhone ? 0.3 : 0.5);
       renderer.setSize(width, height, false);
       renderer.setViewport(0, 0, width, height);
       renderer.setScissorTest(false);
@@ -1610,7 +2054,11 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       });
       [
         floorTexture,
+        floorOverlayTexture,
         backdropTexture,
+        ...parallaxTextures,
+        forestSkirtTexture,
+        forestDepthMistTexture,
         heroTexture,
         heroSlashTexture,
         enemyTexture,
@@ -1627,7 +2075,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         windTexture,
         hitNodeTexture,
         smokeTexture,
-      ].forEach((texture) => texture.dispose());
+      ].forEach((texture) => texture?.dispose());
     };
   }, [viewMode, battleMode, stageId]);
 
@@ -1642,7 +2090,7 @@ function App() {
   });
   const [stageId, setStageId] = useState<StageId>(() => {
     const stage = new URLSearchParams(window.location.search).get('stage');
-    return stage === 'sanctum' ? 'sanctum' : 'dungeon';
+    return stage === 'sanctum' || stage === 'highland' ? stage : 'dungeon';
   });
 
   return (
