@@ -642,8 +642,9 @@ function makeThrustTexture(layer = 0) {
 
   const aura = ctx.createLinearGradient(0, tailY, 0, tipY);
   aura.addColorStop(0, 'rgba(118, 211, 255, 0)');
-  aura.addColorStop(0.22, 'rgba(136, 223, 255, 0.2)');
-  aura.addColorStop(0.64, layer === 1 ? 'rgba(255, 238, 169, 0.52)' : 'rgba(205, 244, 255, 0.46)');
+  aura.addColorStop(0.28, 'rgba(136, 223, 255, 0.06)');
+  aura.addColorStop(0.52, 'rgba(136, 223, 255, 0.18)');
+  aura.addColorStop(0.76, layer === 1 ? 'rgba(255, 238, 169, 0.52)' : 'rgba(205, 244, 255, 0.48)');
   aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.strokeStyle = aura;
   ctx.lineWidth = auraWidth;
@@ -667,8 +668,9 @@ function makeThrustTexture(layer = 0) {
   ctx.globalCompositeOperation = 'source-over';
   const core = ctx.createLinearGradient(0, tailY, 0, tipY);
   core.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  core.addColorStop(0.38, 'rgba(230, 250, 255, 0.66)');
-  core.addColorStop(0.72, 'rgba(255, 248, 205, 0.86)');
+  core.addColorStop(0.42, 'rgba(230, 250, 255, 0.16)');
+  core.addColorStop(0.64, 'rgba(230, 250, 255, 0.44)');
+  core.addColorStop(0.82, 'rgba(255, 248, 205, 0.92)');
   core.addColorStop(1, 'rgba(255, 255, 255, 0.06)');
   ctx.strokeStyle = core;
   ctx.lineWidth = coreWidth;
@@ -704,58 +706,83 @@ function makeShockRingTexture() {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  const soft = ctx.createRadialGradient(240, 260, 24, 240, 260, 230);
-  soft.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  soft.addColorStop(0.34, 'rgba(170, 238, 255, 0.1)');
-  soft.addColorStop(0.68, 'rgba(180, 243, 255, 0.08)');
-  soft.addColorStop(1, 'rgba(118, 214, 255, 0)');
-  ctx.fillStyle = soft;
+  const wake = ctx.createLinearGradient(218, 0, 512, 0);
+  wake.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+  wake.addColorStop(0.24, 'rgba(219, 249, 255, 0.12)');
+  wake.addColorStop(0.68, 'rgba(185, 238, 255, 0.045)');
+  wake.addColorStop(1, 'rgba(185, 238, 255, 0)');
+  ctx.fillStyle = wake;
   ctx.beginPath();
-  ctx.ellipse(238, 266, 214, 170, -0.1, 0, Math.PI * 2);
+  ctx.moveTo(234, 142);
+  ctx.bezierCurveTo(332, 142, 404, 184, 494, 228);
+  ctx.lineTo(494, 284);
+  ctx.bezierCurveTo(396, 322, 326, 360, 234, 370);
+  ctx.closePath();
   ctx.fill();
 
-  const drawBoom = (offsetX: number, offsetY: number, width: number, alpha: number) => {
-    const gradient = ctx.createLinearGradient(96, 108, 414, 404);
-    gradient.addColorStop(0, 'rgba(157, 236, 255, 0)');
-    gradient.addColorStop(0.26, `rgba(223, 251, 255, ${alpha * 0.9})`);
-    gradient.addColorStop(0.56, `rgba(255, 244, 196, ${alpha})`);
-    gradient.addColorStop(0.82, `rgba(180, 242, 255, ${alpha * 0.52})`);
-    gradient.addColorStop(1, 'rgba(157, 236, 255, 0)');
+  for (let i = 0; i < 18; i += 1) {
+    const p = i / 17;
+    const y = 178 + p * 156 + Math.sin(i * 4.3) * 16;
+    const length = 92 + Math.sin(i * 2.1) * 42 + (1 - Math.abs(p - 0.5) * 2) * 118;
+    const alpha = 0.1 + (1 - Math.abs(p - 0.5) * 2) * 0.16;
+    const ray = ctx.createLinearGradient(220, y, 220 + length, y + Math.sin(i) * 18);
+    ray.addColorStop(0, `rgba(246, 255, 255, ${alpha})`);
+    ray.addColorStop(0.44, `rgba(198, 244, 255, ${alpha * 0.5})`);
+    ray.addColorStop(1, 'rgba(198, 244, 255, 0)');
+    ctx.strokeStyle = ray;
+    ctx.lineWidth = 3 + Math.sin(i * 1.7) * 1.4;
+    ctx.beginPath();
+    ctx.moveTo(226, y);
+    ctx.bezierCurveTo(260 + length * 0.2, y - 30 + Math.sin(i) * 12, 306 + length * 0.5, y + 26, 228 + length, y + Math.sin(i * 2.3) * 32);
+    ctx.stroke();
+  }
+
+  const drawEllipseArc = (radiusX: number, radiusY: number, width: number, alpha: number, start: number, end: number, warm = false) => {
+    const gradient = ctx.createLinearGradient(120, 342, 214, 120);
+    gradient.addColorStop(0, warm ? `rgba(255, 226, 152, ${alpha})` : `rgba(238, 254, 255, ${alpha})`);
+    gradient.addColorStop(0.44, `rgba(255, 255, 255, ${alpha * 0.96})`);
+    gradient.addColorStop(0.76, warm ? `rgba(255, 238, 178, ${alpha * 0.52})` : `rgba(184, 240, 255, ${alpha * 0.44})`);
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.strokeStyle = gradient;
     ctx.lineWidth = width;
     ctx.beginPath();
-    ctx.moveTo(282 + offsetX, 78 + offsetY);
-    ctx.bezierCurveTo(142 + offsetX, 62 + offsetY, 90 + offsetX, 216 + offsetY, 138 + offsetX, 318 + offsetY);
-    ctx.bezierCurveTo(188 + offsetX, 426 + offsetY, 334 + offsetX, 424 + offsetY, 356 + offsetX, 322 + offsetY);
-    ctx.bezierCurveTo(376 + offsetX, 226 + offsetY, 256 + offsetX, 206 + offsetY, 224 + offsetX, 280 + offsetY);
+    ctx.ellipse(168, 256, radiusX, radiusY, 0, start, end);
     ctx.stroke();
   };
 
-  drawBoom(0, 0, 34, 0.7);
-  ctx.globalCompositeOperation = 'lighter';
-  drawBoom(8, -4, 16, 0.92);
-  drawBoom(-20, 20, 8, 0.34);
+  const drawDimEllipse = (radiusX: number, radiusY: number, width: number, alpha: number) => {
+    ctx.strokeStyle = `rgba(190, 242, 255, ${alpha})`;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.ellipse(168, 256, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  };
 
-  const tail = ctx.createLinearGradient(176, 288, 464, 236);
-  tail.addColorStop(0, 'rgba(190, 246, 255, 0)');
-  tail.addColorStop(0.34, 'rgba(245, 255, 255, 0.82)');
-  tail.addColorStop(0.68, 'rgba(188, 241, 255, 0.35)');
-  tail.addColorStop(1, 'rgba(150, 224, 255, 0)');
-  ctx.strokeStyle = tail;
-  ctx.lineWidth = 13;
+  const halo = ctx.createRadialGradient(168, 256, 16, 168, 256, 190);
+  halo.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
+  halo.addColorStop(0.28, 'rgba(225, 250, 255, 0.16)');
+  halo.addColorStop(0.54, 'rgba(185, 238, 255, 0.06)');
+  halo.addColorStop(1, 'rgba(185, 238, 255, 0)');
+  ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.moveTo(208, 292);
-  ctx.bezierCurveTo(292, 246, 366, 248, 466, 216);
-  ctx.stroke();
+  ctx.ellipse(168, 256, 96, 178, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'lighter';
+  drawDimEllipse(52, 184, 6, 0.18);
+  drawEllipseArc(42, 172, 18, 0.9, Math.PI * 0.46, Math.PI * 1.28, true);
+  drawEllipseArc(54, 186, 7, 0.86, Math.PI * 0.52, Math.PI * 1.22);
+  drawEllipseArc(30, 152, 4, 0.5, Math.PI * 0.55, Math.PI * 1.16);
 
   ctx.globalCompositeOperation = 'destination-out';
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.48)';
-  ctx.lineWidth = 16;
+  const aperture = ctx.createRadialGradient(168, 256, 18, 168, 256, 82);
+  aperture.addColorStop(0, 'rgba(0, 0, 0, 0.82)');
+  aperture.addColorStop(0.58, 'rgba(0, 0, 0, 0.24)');
+  aperture.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = aperture;
   ctx.beginPath();
-  ctx.moveTo(258, 118);
-  ctx.bezierCurveTo(154, 130, 130, 238, 168, 312);
-  ctx.bezierCurveTo(210, 388, 318, 382, 330, 316);
-  ctx.stroke();
+  ctx.ellipse(168, 256, 27, 126, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -806,9 +833,9 @@ function makeVortexTexture() {
     ctx.stroke();
   };
 
-  drawRibbon(0.1, -18, 10, 0.24);
-  drawRibbon(1.75, 8, 6, 0.34, true);
-  drawRibbon(3.25, 24, 4, 0.18);
+  drawRibbon(0.1, -18, 10, 0.32);
+  drawRibbon(1.75, 8, 6, 0.44, true);
+  drawRibbon(3.25, 24, 4, 0.26);
 
   ctx.globalCompositeOperation = 'destination-out';
   const fade = ctx.createLinearGradient(0, 0, 1024, 0);
@@ -1383,12 +1410,18 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     });
 
     const shockRingTexture = makeShockRingTexture();
-    const shockRings = [0, 1, 2].map((index) => {
+    const shockRingLayers = [
+      { along: 0.16, side: -0.015, sizeX: 0.94, sizeY: 0.84, opacity: 0.66, delay: 0, z: -0.02 },
+      { along: 0.18, side: 0.01, sizeX: 1.08, sizeY: 0.95, opacity: 0.48, delay: 0.026, z: 0 },
+      { along: 0.2, side: 0.025, sizeX: 1.2, sizeY: 1.06, opacity: 0.34, delay: 0.052, z: 0.018 },
+      { along: 0.46, side: 0.025, sizeX: 2.42, sizeY: 1.76, opacity: 0.4, delay: 0.04, z: 0.04 },
+    ];
+    const shockRings = shockRingLayers.map((layer, index) => {
       const ring = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.0, 1.0),
+        new THREE.PlaneGeometry(1.22 + index * 0.08, 1.22 + index * 0.08),
         new THREE.MeshBasicMaterial({
           map: shockRingTexture,
-          color: index === 1 ? 0xffecb4 : 0xd8f6ff,
+          color: index === 1 ? 0xffecb4 : index === 3 ? 0xe6fbff : 0xd8f6ff,
           transparent: true,
           opacity: 0,
           blending: THREE.AdditiveBlending,
@@ -1403,24 +1436,47 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     });
 
     const vortexTexture = makeVortexTexture();
-    const vortexWinds = [0, 1, 2].map((index) => {
+    const vortexWinds = [0, 1, 2, 3, 4, 5].map((index) => {
       const vortex = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.65 + index * 0.34, 0.86 + index * 0.18),
+        new THREE.PlaneGeometry(2.65 + index * 0.18, 0.58 + index * 0.05),
         new THREE.MeshBasicMaterial({
           map: vortexTexture,
-          color: index === 1 ? 0xffdf9a : 0xc7efff,
+          color: index % 2 === 1 ? 0xfff0c0 : 0xe9fbff,
           transparent: true,
           opacity: 0,
-          blending: THREE.AdditiveBlending,
+          blending: THREE.NormalBlending,
           depthWrite: false,
           depthTest: false,
           side: THREE.DoubleSide,
         }),
       );
-      vortex.rotation.z = -0.78 + index * 0.13;
+      vortex.rotation.z = -0.78 + index * 0.08;
       scene.add(vortex);
       return vortex;
     });
+
+    const vortexLineCount = 5;
+    const vortexLineSegments = 42;
+    const vortexLinePositions = new Float32Array(vortexLineCount * vortexLineSegments * 2 * 3);
+    const vortexLineSeeds = Array.from({ length: vortexLineCount }, (_, index) => ({
+      phase: index * 1.42,
+      amp: 0.11 + index * 0.018,
+      lift: (index - 2) * 0.012,
+    }));
+    const vortexLineGeometry = new THREE.BufferGeometry();
+    vortexLineGeometry.setAttribute('position', new THREE.BufferAttribute(vortexLinePositions, 3));
+    const vortexLines = new THREE.LineSegments(
+      vortexLineGeometry,
+      new THREE.LineBasicMaterial({
+        color: 0xf2feff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    );
+    scene.add(vortexLines);
 
     const hitSparkCount = 150;
     const hitPositions = new Float32Array(hitSparkCount * 3);
@@ -1804,34 +1860,65 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         const center = sampleThrustLine(0.5 + layer.alongOffset, layer.side, 0);
         trail.position.set(center.x, center.y, layer.z);
         trail.rotation.z = thrustPath.angle + layer.rotate;
-        trail.scale.set(layoutRig.heroScale > 0.9 ? 1 : 0.78, (thrustPath.length / layer.height) * 1.08, 1);
+        trail.scale.set(layoutRig.heroScale > 0.9 ? 1 : 0.78, (thrustPath.length / layer.height) * 1.02, 1);
         material.uniforms.revealHead.value = Math.min(1.06, -0.08 + draw * 1.16);
         material.uniforms.revealTail.value = Math.max(-0.12, -0.12 + wipe * 1.18);
         material.uniforms.opacity.value = battleMode === 'thrust' ? Math.max(0, fade) * layer.opacity : 0;
       });
 
-      const sonicBase = sampleThrustLine(0.18, 0, 0.08);
       shockRings.forEach((ring, i) => {
-        const local = windowProgress(combatCycle, 0.18 + i * 0.03, 0.48 + i * 0.03);
+        const layer = shockRingLayers[i];
+        const local = windowProgress(combatCycle, 0.2 + layer.delay, 0.5 + layer.delay);
         const flash = local <= 0 || local >= 1 ? 0 : Math.sin(local * Math.PI);
-        ring.position.set(sonicBase.x + i * 0.045, sonicBase.y + i * 0.014, sonicBase.z - 0.02 + i * 0.014);
+        const point = sampleThrustLine(layer.along, layer.side + Math.sin(t * 3.1 + i) * 0.008, 0.08);
+        ring.position.set(
+          point.x,
+          point.y + (i === 3 ? 0.03 : 0),
+          point.z + layer.z,
+        );
         ring.scale.set(
-          (0.78 + easeOutCubic(local) * (0.7 + i * 0.14)) * layoutRig.heroScale,
-          (0.5 + easeOutCubic(local) * (0.38 + i * 0.08)) * layoutRig.heroScale,
+          (layer.sizeX + easeOutCubic(local) * (0.22 + i * 0.04)) * layoutRig.heroScale,
+          (layer.sizeY + easeOutCubic(local) * (0.14 + i * 0.03)) * layoutRig.heroScale,
           1,
         );
-        ring.rotation.z = thrustPath.angle + Math.PI / 2 + 0.1 + Math.sin(t * 2.2 + i) * 0.025;
-        ring.material.opacity = battleMode === 'thrust' ? flash * (0.82 - i * 0.15) : 0;
+        ring.rotation.z = thrustPath.angle + Math.PI / 2 - 0.16 + Math.sin(t * 2.2 + i) * 0.022;
+        ring.material.opacity = battleMode === 'thrust' ? flash * (i === 3 ? Math.max(thrustFade, 0.62) : thrustFade) * layer.opacity : 0;
       });
 
       vortexWinds.forEach((vortex, i) => {
-        const localPulse = Math.max(0, windBurst - i * 0.08);
-        const point = sampleThrustLine(0.16 + i * 0.12, Math.sin(t * 2.4 + i) * 0.08, 0.02 * i);
-        vortex.position.set(point.x, point.y, point.z - 0.04 + i * 0.02);
-        vortex.scale.set(0.72 + thrustDraw * 0.52 + i * 0.08, 0.46 + localPulse * 0.26, 1);
-        vortex.rotation.z = thrustPath.angle + t * (0.75 + i * 0.16);
-        vortex.material.opacity = battleMode === 'thrust' ? localPulse * thrustFade * (0.34 - i * 0.06) : 0;
+        const localPulse = Math.max(0, windBurst - i * 0.045);
+        const along = 0.16 + i * 0.105 + Math.sin(t * 1.8 + i) * 0.014;
+        const side = Math.sin(t * (2.4 + i * 0.18) + i) * (0.09 + i * 0.012);
+        const point = sampleThrustLine(along, side, 0.012 * i);
+        vortex.position.set(point.x, point.y, point.z + 0.11 + i * 0.02);
+        vortex.scale.set(0.84 + thrustDraw * 0.32 + i * 0.04, 0.66 + localPulse * 0.28, 1);
+        vortex.rotation.z = thrustPath.angle + Math.PI / 2 + Math.sin(t * 2.2 + i) * 0.11;
+        vortex.material.opacity = battleMode === 'thrust' ? localPulse * thrustFade * (0.52 - i * 0.052) : 0;
       });
+
+      const vortexLineArr = vortexLineGeometry.attributes.position.array as Float32Array;
+      let vortexLineOffset = 0;
+      vortexLineSeeds.forEach((seed, lineIndex) => {
+        for (let segment = 0; segment < vortexLineSegments; segment += 1) {
+          const p0 = 0.16 + (segment / vortexLineSegments) * 0.62;
+          const p1 = 0.16 + ((segment + 1) / vortexLineSegments) * 0.62;
+          const envelope0 = Math.sin((p0 - 0.16) / 0.62 * Math.PI);
+          const envelope1 = Math.sin((p1 - 0.16) / 0.62 * Math.PI);
+          const side0 = Math.sin((p0 * 5.4 + t * 0.82 + seed.phase) * Math.PI) * seed.amp * envelope0;
+          const side1 = Math.sin((p1 * 5.4 + t * 0.82 + seed.phase) * Math.PI) * seed.amp * envelope1;
+          const point0 = sampleThrustLine(p0, side0, seed.lift + Math.cos(p0 * Math.PI * 5 + seed.phase) * 0.018 * envelope0);
+          const point1 = sampleThrustLine(p1, side1, seed.lift + Math.cos(p1 * Math.PI * 5 + seed.phase) * 0.018 * envelope1);
+          vortexLineArr[vortexLineOffset] = point0.x;
+          vortexLineArr[vortexLineOffset + 1] = point0.y;
+          vortexLineArr[vortexLineOffset + 2] = point0.z + 0.18 + lineIndex * 0.006;
+          vortexLineArr[vortexLineOffset + 3] = point1.x;
+          vortexLineArr[vortexLineOffset + 4] = point1.y;
+          vortexLineArr[vortexLineOffset + 5] = point1.z + 0.18 + lineIndex * 0.006;
+          vortexLineOffset += 6;
+        }
+      });
+      vortexLineGeometry.attributes.position.needsUpdate = true;
+      vortexLines.material.opacity = battleMode === 'thrust' ? windBurst * thrustFade * 0.24 : 0;
 
       const hitArr = hitGeometry.attributes.position.array as Float32Array;
       const hitAge = windowProgress(combatCycle, 0.47, 0.77);
