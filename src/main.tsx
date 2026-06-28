@@ -21,10 +21,34 @@ const ASSETS = {
 };
 
 type ViewMode = 'auto' | 'pc' | 'sp';
-type BattleMode = 'idle' | 'slash' | 'thrust';
+type BattleMode = 'idle' | 'slash' | 'thrust' | 'special';
 type StageId = 'dungeon' | 'sanctum' | 'highland';
 type ResponsiveProfile = 'pc' | 'sp';
 type Vec3Tuple = [number, number, number];
+
+// Live-tunable parameters for the 大技 (special) cinematic. Read every frame via
+// a ref so the on-screen panel updates without rebuilding the Three.js scene.
+type TunerParams = {
+  auraIntensity: number;
+  auraLight: number;
+  frameFill: number;
+  fovTele: number;
+  fovWide: number;
+  dofStrength: number;
+  bloomBoost: number;
+  chroma: number;
+};
+
+const DEFAULT_TUNER: TunerParams = {
+  auraIntensity: 1,
+  auraLight: 4.5,
+  frameFill: 0.66,
+  fovTele: 22,
+  fovWide: 58,
+  dofStrength: 1,
+  bloomBoost: 0.3,
+  chroma: 0.02,
+};
 
 type StageCameraProfile = {
   fov: number | ((aspect: number) => number);
@@ -433,6 +457,49 @@ const colorGradeShader = {
   `,
 };
 
+// Hit-impact chromatic aberration: radial RGB split + a slight radial smear,
+// i.e. the "colors separate" blur Octopath uses on heavy hits.
+const chromaticAberrationShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    amount: { value: 0 },
+    blur: { value: 0 },
+    center: { value: new THREE.Vector2(0.5, 0.5) },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float amount;
+    uniform float blur;
+    uniform vec2 center;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 dir = vUv - center;
+      if (amount <= 0.0001 && blur <= 0.0001) {
+        gl_FragColor = texture2D(tDiffuse, vUv);
+        return;
+      }
+      vec2 off = dir * amount;
+      vec3 acc = vec3(0.0);
+      for (int i = 0; i < 4; i += 1) {
+        float f = float(i) / 3.0;
+        vec2 b = dir * blur * (f - 0.5);
+        acc.r += texture2D(tDiffuse, vUv + off * (1.0 + f * 0.6) + b).r;
+        acc.g += texture2D(tDiffuse, vUv + b).g;
+        acc.b += texture2D(tDiffuse, vUv - off * (1.0 + f * 0.6) + b).b;
+      }
+      gl_FragColor = vec4(acc / 4.0, 1.0);
+    }
+  `,
+};
+
 function makeGlowTexture(colorStops?: Array<[number, string]>) {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -448,6 +515,65 @@ function makeGlowTexture(colorStops?: Array<[number, string]>) {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 256);
   return new THREE.CanvasTexture(canvas);
+}
+
+function makeAuraTexture() {
+  // softer, hollow-ish halo: dim center (so it doesn't wash the character),
+  // brighter mid ring, smooth falloff.
+  return makeGlowTexture([
+    [0, 'rgba(255, 250, 235, 0.4)'],
+    [0.34, 'rgba(255, 236, 190, 0.46)'],
+    [0.62, 'rgba(255, 200, 110, 0.2)'],
+    [1, 'rgba(255, 180, 70, 0)'],
+  ]);
+}
+
+function makeAuraRingTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const pool = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+  pool.addColorStop(0, 'rgba(255, 238, 182, 0.42)');
+  pool.addColorStop(0.46, 'rgba(255, 208, 124, 0.12)');
+  pool.addColorStop(1, 'rgba(255, 208, 124, 0)');
+  ctx.fillStyle = pool;
+  ctx.fillRect(0, 0, 512, 512);
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = 'rgba(255, 248, 214, 0.92)';
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.arc(256, 256, 196, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 226, 152, 0.4)';
+  ctx.lineWidth = 36;
+  ctx.beginPath();
+  ctx.arc(256, 256, 196, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 244, 206, 0.5)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(256, 256, 150, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // rune ticks around the ring
+  for (let i = 0; i < 24; i += 1) {
+    const angle = (i / 24) * Math.PI * 2;
+    const inner = i % 2 === 0 ? 168 : 178;
+    const outer = i % 2 === 0 ? 222 : 210;
+    ctx.strokeStyle = `rgba(255, 240, 200, ${i % 2 === 0 ? 0.7 : 0.32})`;
+    ctx.lineWidth = i % 2 === 0 ? 6 : 3;
+    ctx.beginPath();
+    ctx.moveTo(256 + Math.cos(angle) * inner, 256 + Math.sin(angle) * inner);
+    ctx.lineTo(256 + Math.cos(angle) * outer, 256 + Math.sin(angle) * outer);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 function makeBeamTexture() {
@@ -987,7 +1113,7 @@ function makeSilhouetteShadowTexture(src: string) {
   return texture;
 }
 
-function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; battleMode: BattleMode; stageId: StageId }) {
+function DungeonScene({ viewMode, battleMode, stageId, paramsRef }: { viewMode: ViewMode; battleMode: BattleMode; stageId: StageId; paramsRef: React.MutableRefObject<TunerParams> }) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1318,6 +1444,90 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     if (heroDayRim && enemyDayRim) {
       scene.add(heroDayRim, enemyDayRim);
     }
+
+    // --- Special move (大技) aura rig ---
+    const auraColor = isHighland ? 0xcdf7c2 : 0xffd089;
+    const auraTexture = makeAuraTexture();
+    const heroAura = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: auraTexture,
+        color: auraColor,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    );
+    heroAura.scale.setScalar(0.001);
+    // draw behind the hero so the glow reads as a backlit halo around the
+    // silhouette instead of washing out the character's front.
+    heroAura.renderOrder = -1;
+    scene.add(heroAura);
+
+    const auraCore = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: auraTexture,
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    );
+    auraCore.scale.setScalar(0.001);
+    scene.add(auraCore);
+
+    // an actual light so the aura illuminates the hero + nearby floor
+    const auraLight = new THREE.PointLight(isHighland ? 0xe6ffd6 : 0xffcf8a, 0, 9, 1.6);
+    scene.add(auraLight);
+
+    const auraRingTexture = makeAuraRingTexture();
+    const auraRing = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.7, 3.7),
+      new THREE.MeshBasicMaterial({
+        map: auraRingTexture,
+        color: auraColor,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    auraRing.rotation.x = -Math.PI / 2;
+    scene.add(auraRing);
+
+    const auraEmberTexture = makeGlowTexture([
+      [0, 'rgba(255, 255, 235, 1)'],
+      [0.4, 'rgba(255, 210, 120, 0.5)'],
+      [1, 'rgba(255, 180, 70, 0)'],
+    ]);
+    const auraEmberCount = 130;
+    const auraEmberPositions = new Float32Array(auraEmberCount * 3);
+    const auraEmberSeeds = Array.from({ length: auraEmberCount }, () => ({
+      angle: Math.random() * Math.PI * 2,
+      radius: 0.25 + Math.random() * 1.05,
+      speed: 0.35 + Math.random() * 0.9,
+      phase: Math.random(),
+      swirl: (Math.random() - 0.5) * 1.6,
+      height: 2.2 + Math.random() * 1.7,
+    }));
+    const auraEmberGeometry = new THREE.BufferGeometry();
+    auraEmberGeometry.setAttribute('position', new THREE.BufferAttribute(auraEmberPositions, 3));
+    const auraEmbers = new THREE.Points(
+      auraEmberGeometry,
+      new THREE.PointsMaterial({
+        map: auraEmberTexture,
+        color: isHighland ? 0xe9ffdc : 0xffe1a6,
+        size: 0.12,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    scene.add(auraEmbers);
 
     const beamTexture = isHighland ? makeForestBeamTexture() : makeBeamTexture();
     const beamMaterial = new THREE.MeshBasicMaterial({
@@ -1669,12 +1879,27 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     );
     const bokehPass = new BokehPass(scene, camera, { focus: initialPost.focus, aperture: initialPost.aperture, maxblur: initialPost.maxblur });
     const gradePass = new ShaderPass(colorGradeShader);
+    const chromaPass = new ShaderPass(chromaticAberrationShader);
     composer.addPass(bloomPass);
     composer.addPass(bokehPass);
     composer.addPass(gradePass);
+    composer.addPass(chromaPass);
+
+    // base post values for the active profile; the special move lerps away from
+    // these each frame and resize() keeps them in sync with the current profile.
+    const basePost = {
+      bloomStrength: initialPost.bloomStrength,
+      bloomRadius: initialPost.bloomRadius,
+      focus: initialPost.focus,
+      aperture: initialPost.aperture,
+      maxblur: initialPost.maxblur,
+      exposure: initialPost.exposure,
+      saturation: initialPost.saturation,
+    };
 
     const clock = new THREE.Clock();
     let raf = 0;
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
     const easeOutCubic = (value: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, value)), 3);
     const easeInOutCubic = (value: number) => {
       const p = Math.min(1, Math.max(0, value));
@@ -1734,6 +1959,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
     const animate = () => {
       const t = clock.getElapsedTime();
       raf = requestAnimationFrame(animate);
+      const p = paramsRef.current;
       const isBattleActive = battleMode !== 'idle';
       const combatCycle = isBattleActive ? forcedBattlePhase ?? (t % 3.05) / 3.05 : 0;
       const slashBurst = pulseWindow(combatCycle, 0.32, 0.62);
@@ -1748,18 +1974,99 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       const lunge = isBattleActive ? easeInOutCubic(windowProgress(combatCycle, 0.18, 0.4)) * (1 - easeOutCubic(windowProgress(combatCycle, 0.58, 0.94))) : 0;
       const recoil = isBattleActive ? pulseWindow(combatCycle, 0.48, 0.8) : 0;
 
+      // --- Special move (大技) timeline ---
+      const special = battleMode === 'special';
+      const sp = special ? combatCycle : 0;
+      const auraRise = easeOutCubic(windowProgress(sp, 0.04, 0.34));
+      const auraFall = easeInOutCubic(windowProgress(sp, 0.66, 0.96));
+      const aura = special ? auraRise * (1 - auraFall) : 0;
+      const release = special ? pulseWindow(sp, 0.46, 0.66) : 0;
+      const auraFlare = special ? Math.max(aura, release) : 0;
+      // A single "push" progress drives BOTH the dolly-in and the FOV widening,
+      // so the zoom and the wide-angle change happen together (true dolly zoom)
+      // instead of zooming first and widening afterwards.
+      const push = special ? easeInOutCubic(windowProgress(sp, 0.06, 0.42)) : 0;
+      const settle = special ? easeInOutCubic(windowProgress(sp, 0.72, 0.97)) : 0;
+      const cine = special ? push * (1 - settle) : 0;
+      const lensT = push; // telephoto -> wide, locked to the push-in
+      // hit chromatic aberration: spikes at impact then decays
+      const impact = special && sp >= 0.5 ? Math.max(0, 1 - windowProgress(sp, 0.5, 0.82)) : 0;
+      const chroma = impact * impact;
+
       floorTexture.offset.set(Math.sin(t * 0.06) * 0.006, Math.cos(t * 0.05) * 0.005);
       floorOverlayTexture?.offset.set(0.34 + Math.sin(t * 0.035) * 0.004, 0.19 + Math.cos(t * 0.04) * 0.004);
-      const battleShake = isBattleActive ? hitBurst * cameraRig.shake : 0;
+      const battleShake = isBattleActive ? Math.max(hitBurst, release) * cameraRig.shake : 0;
       const shakeX = (Math.sin(t * 54.1) + Math.sin(t * 31.7)) * 0.5 * battleShake;
       const shakeY = Math.sin(t * 45.3) * battleShake * 0.55;
-      camera.position.x = cameraRig.x + Math.sin(t * 0.2) * cameraRig.swayX + shakeX;
-      camera.position.y = cameraRig.y + Math.sin(t * 0.16) * cameraRig.swayY + shakeY;
-      camera.position.z = cameraRig.z + Math.sin(t * 0.13) * cameraRig.swayZ;
-      camera.lookAt(cameraRig.targetX + Math.sin(t * 0.17) * 0.25 + shakeX * 0.2, cameraRig.targetY + shakeY * 0.12, cameraRig.targetZ);
+      const baseCamX = cameraRig.x + Math.sin(t * 0.2) * cameraRig.swayX + shakeX;
+      const baseCamY = cameraRig.y + Math.sin(t * 0.16) * cameraRig.swayY + shakeY;
+      const baseCamZ = cameraRig.z + Math.sin(t * 0.13) * cameraRig.swayZ;
+      const baseLookX = cameraRig.targetX + Math.sin(t * 0.17) * 0.25 + shakeX * 0.2;
+      const baseLookY = cameraRig.targetY + shakeY * 0.12;
+      const baseLookZ = cameraRig.targetZ;
+
+      let camX = baseCamX;
+      let camY = baseCamY;
+      let camZ = baseCamZ;
+      let lookX = baseLookX;
+      let lookY = baseLookY;
+      let lookZ = baseLookZ;
+      let camFov = cameraRig.fov;
+
+      if (special && cine > 0.0001) {
+        const heroFocusX = layoutRig.heroX;
+        const heroFocusY = layoutRig.heroY + 0.18;
+        const heroFocusZ = layoutRig.heroZ;
+        // Dolly zoom: vary the (vertical) FOV while moving the camera distance so
+        // the hero keeps the same on-screen size — only the background "breathes".
+        const fovDeg = lerp(p.fovTele, p.fovWide, lensT);
+        const heroWorldHeight = 2.55 * layoutRig.heroScale;
+        const frameFill = p.frameFill; // hero occupies this fraction of the vertical frame
+        const dist = heroWorldHeight / (2 * frameFill * Math.tan((fovDeg * Math.PI) / 360));
+        const dnx = 0.2;
+        const dny = 0.32;
+        const dnz = 1.0;
+        const dlen = Math.hypot(dnx, dny, dnz);
+        const handheld = Math.sin(t * 0.8) * 0.025;
+        const cineX = heroFocusX + (dnx / dlen) * dist + handheld + shakeX;
+        const cineY = heroFocusY + (dny / dlen) * dist + Math.sin(t * 0.62) * 0.02 + shakeY;
+        const cineZ = heroFocusZ + (dnz / dlen) * dist;
+        camX = lerp(baseCamX, cineX, cine);
+        camY = lerp(baseCamY, cineY, cine);
+        camZ = lerp(baseCamZ, cineZ, cine);
+        lookX = lerp(baseLookX, heroFocusX + handheld * 0.4 + shakeX * 0.5, cine);
+        lookY = lerp(baseLookY, heroFocusY + 0.42, cine);
+        lookZ = lerp(baseLookZ, heroFocusZ, cine);
+        camFov = lerp(cameraRig.fov, fovDeg, cine);
+      }
+
+      camera.position.set(camX, camY, camZ);
+      camera.lookAt(lookX, lookY, lookZ);
+      if (special) {
+        camera.fov = camFov;
+        camera.updateProjectionMatrix();
+      }
       parallaxLayers.forEach(({ mesh, config }) => {
         mesh.position.x = config.position[0] + camera.position.x * config.drift + Math.sin(t * 0.05 + config.position[2]) * config.drift * 0.8;
       });
+
+      if (special) {
+        // Strong DOF: pull focus onto the hero, blur the background heavily.
+        const heroDist = Math.hypot(camX - layoutRig.heroX, camY - (layoutRig.heroY + 0.18), camZ - layoutRig.heroZ);
+        bokehPass.uniforms.focus.value = lerp(basePost.focus, heroDist, cine);
+        bokehPass.uniforms.aperture.value = lerp(basePost.aperture, 0.0022 * p.dofStrength, cine);
+        bokehPass.uniforms.maxblur.value = lerp(basePost.maxblur, 0.011 * p.dofStrength, cine);
+        bloomPass.strength = basePost.bloomStrength + auraFlare * p.bloomBoost;
+        bloomPass.radius = basePost.bloomRadius + auraFlare * 0.12;
+        gradePass.uniforms.exposure.value = basePost.exposure + release * 0.2;
+        gradePass.uniforms.saturation.value = basePost.saturation + release * 0.15;
+        chromaPass.uniforms.amount.value = chroma * p.chroma;
+        chromaPass.uniforms.blur.value = chroma * p.chroma * 1.2;
+        chromaPass.uniforms.center.value.set(0.5, 0.52);
+      } else {
+        chromaPass.uniforms.amount.value = 0;
+        chromaPass.uniforms.blur.value = 0;
+      }
 
       const heroCombatScale = isBattleActive && combatCycle < 0.9 ? 1.12 : 1;
       const isSlashSprite = isBattleActive && combatCycle < 0.9;
@@ -1775,7 +2082,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       }
       hero.material.needsUpdate = true;
 
-      hero.position.x = layoutRig.heroX + lunge * (layoutRig.heroScale > 0.9 ? 0.72 : 0.42);
+      hero.position.x = layoutRig.heroX + lunge * (special ? 0.26 : layoutRig.heroScale > 0.9 ? 0.72 : 0.42);
       hero.position.y = layoutRig.heroY + Math.sin(t * 2.2) * 0.045 + lunge * 0.08;
       hero.position.z = layoutRig.heroZ;
       enemy.position.x = layoutRig.enemyX + recoil * 0.05;
@@ -1814,6 +2121,37 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       heroShadow.scale.setScalar(1 + Math.sin(t * 2.2) * 0.018);
       enemyShadow.scale.setScalar(1 + Math.sin(t * 1.8 + 1.1) * 0.02);
 
+      // --- aura / special-move visuals ---
+      // Keep the glow as a character-sized rim/backlight, not a screen-filling
+      // fireball — the hero must stay clearly readable through it.
+      const auraPulse = aura * (0.85 + Math.sin(t * 9.0) * 0.15);
+      const auraK = p.auraIntensity;
+      heroAura.position.set(hero.position.x, hero.position.y + 0.12, hero.position.z - 0.08);
+      heroAura.scale.setScalar((2.55 + Math.sin(t * 4.0) * 0.18 + release * 0.8) * layoutRig.heroScale);
+      (heroAura.material as THREE.SpriteMaterial).opacity = Math.min(0.7, (auraPulse * 0.22 + release * 0.2) * auraK);
+      auraCore.position.set(hero.position.x, hero.position.y + 0.18, hero.position.z - 0.06);
+      auraCore.scale.setScalar((0.85 + release * 0.8) * layoutRig.heroScale);
+      (auraCore.material as THREE.SpriteMaterial).opacity = Math.min(0.6, (aura * 0.07 + release * 0.3) * auraK);
+      auraLight.position.set(hero.position.x, hero.position.y + 0.2, hero.position.z + 0.6);
+      auraLight.intensity = auraFlare * p.auraLight;
+      auraRing.position.set(hero.position.x, 0.05, layoutRig.heroZ + 0.18);
+      auraRing.scale.setScalar((0.95 + easeOutCubic(aura) * 0.5 + release * 0.3) * layoutRig.heroScale);
+      (auraRing.material as THREE.MeshBasicMaterial).opacity = (aura * 0.3 + release * 0.18) * auraK;
+      auraRing.rotation.z = t * 0.6;
+      const auraEmberArr = auraEmberGeometry.attributes.position.array as Float32Array;
+      for (let i = 0; i < auraEmberCount; i += 1) {
+        const seed = auraEmberSeeds[i];
+        const rise = (seed.phase + t * seed.speed * 0.35) % 1;
+        const swirlAngle = seed.angle + rise * seed.swirl * Math.PI;
+        const radius = seed.radius * (1 - rise * 0.5);
+        auraEmberArr[i * 3] = hero.position.x + Math.cos(swirlAngle) * radius;
+        auraEmberArr[i * 3 + 1] = hero.position.y - 1.0 + rise * seed.height;
+        auraEmberArr[i * 3 + 2] = hero.position.z + Math.sin(swirlAngle) * radius * 0.6 + 0.04;
+      }
+      auraEmberGeometry.attributes.position.needsUpdate = true;
+      (auraEmbers.material as THREE.PointsMaterial).opacity = aura * 0.6 * auraK;
+      (auraEmbers.material as THREE.PointsMaterial).size = (0.1 + aura * 0.07) * (layoutRig.heroScale > 0.9 ? 1 : 0.8);
+
       runeGlows.forEach((glow, i) => {
         glow.material.opacity = 0.5 + Math.sin(t * 1.8 + i * 1.7) * 0.16;
         glow.scale.setScalar(0.82 + Math.sin(t * 1.3 + i) * 0.08);
@@ -1837,7 +2175,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         arc.scale.setScalar(layoutRig.heroScale > 0.9 ? 1 : 0.76);
         material.uniforms.revealHead.value = Math.min(1.04, -0.1 + draw * 1.14);
         material.uniforms.revealTail.value = Math.max(-0.12, -0.12 + wipe * 1.2);
-        material.uniforms.opacity.value = battleMode === 'slash' ? Math.max(0, fade) * layer.opacity : 0;
+        material.uniforms.opacity.value = battleMode === 'slash' || special ? Math.max(0, fade) * layer.opacity : 0;
       });
 
       windRibbons.forEach((ribbon, i) => {
@@ -1846,7 +2184,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         ribbon.position.y = 1.5 + i * 0.19 + Math.sin(t * 3.4 + i) * 0.018;
         ribbon.position.z = 0.66 + i * 0.035;
         ribbon.scale.set(0.85 + slashDraw * 0.2, 0.4 + localPulse * 0.14, 1);
-        ribbon.material.opacity = battleMode === 'slash' ? localPulse * slashFade * (0.26 - i * 0.04) : 0;
+        ribbon.material.opacity = battleMode === 'slash' || special ? localPulse * slashFade * (0.26 - i * 0.04) : 0;
       });
 
       const thrustPath = getThrustPath();
@@ -1998,7 +2336,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         slashSparkArr[i * 3 + 2] = point.z;
       }
       slashSparkGeometry.attributes.position.needsUpdate = true;
-      slashSparks.material.opacity = battleMode === 'slash' ? slashBurst * 0.56 : 0;
+      slashSparks.material.opacity = battleMode === 'slash' || special ? slashBurst * 0.56 : 0;
       slashSparks.material.size = 0.024 + slashBurst * 0.032;
 
       const thrustSparkArr = thrustSparkGeometry.attributes.position.array as Float32Array;
@@ -2028,7 +2366,7 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         smokeArr[i * 3 + 2] = layoutRig.heroZ + 0.06 + Math.sin(seed.angle) * spread * 0.7;
       }
       smokeGeometry.attributes.position.needsUpdate = true;
-      smoke.material.opacity = battleMode === 'slash' ? smokeBurst * 0.36 : 0;
+      smoke.material.opacity = battleMode === 'slash' || special ? smokeBurst * 0.36 : 0;
       smoke.material.size = (layoutRig.heroScale > 0.9 ? 0.24 : 0.18) + smokeAge * 0.34;
 
       const arr = particleGeometry.attributes.position.array as Float32Array;
@@ -2092,6 +2430,13 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
       gradePass.uniforms.saturation.value = post.saturation;
       gradePass.uniforms.warmth.value = post.warmth;
       gradePass.uniforms.vignette.value = post.vignette;
+      basePost.bloomStrength = post.bloomStrength;
+      basePost.bloomRadius = post.bloomRadius;
+      basePost.focus = post.focus;
+      basePost.aperture = post.aperture;
+      basePost.maxblur = post.maxblur;
+      basePost.exposure = post.exposure;
+      basePost.saturation = post.saturation;
       particleMaterial.size = isHighland ? (isPhone ? 0.26 : 0.36) : (isPhone ? 0.024 : 0.034);
       particleMaterial.opacity = isHighland ? (isPhone ? 0.12 : 0.16) : (isPhone ? 0.3 : 0.5);
       renderer.setSize(width, height, false);
@@ -2150,6 +2495,9 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
         heroSlashTexture,
         enemyTexture,
         glowTexture,
+        auraTexture,
+        auraRingTexture,
+        auraEmberTexture,
         beamTexture,
         blobShadowTexture,
         heroSilhouetteTexture,
@@ -2169,25 +2517,92 @@ function DungeonScene({ viewMode, battleMode, stageId }: { viewMode: ViewMode; b
   return <div className="scene" ref={mountRef} />;
 }
 
+const TUNER_FIELDS: Array<{ key: keyof TunerParams; label: string; min: number; max: number; step: number }> = [
+  { key: 'auraIntensity', label: 'オーラ強度', min: 0, max: 2, step: 0.05 },
+  { key: 'auraLight', label: 'オーラ光量', min: 0, max: 10, step: 0.1 },
+  { key: 'frameFill', label: 'ズーム量', min: 0.4, max: 0.9, step: 0.01 },
+  { key: 'fovTele', label: '望遠FOV', min: 12, max: 45, step: 1 },
+  { key: 'fovWide', label: '広角FOV', min: 40, max: 80, step: 1 },
+  { key: 'dofStrength', label: 'ボケ強度', min: 0, max: 2.5, step: 0.05 },
+  { key: 'bloomBoost', label: 'ブルーム', min: 0, max: 1, step: 0.02 },
+  { key: 'chroma', label: '色収差', min: 0, max: 0.05, step: 0.002 },
+];
+
+function formatTunerValue(value: number, step: number) {
+  const decimals = step < 0.01 ? 3 : step < 1 ? 2 : 0;
+  return value.toFixed(decimals);
+}
+
+function TunerPanel({
+  open,
+  params,
+  onChange,
+  onToggle,
+  onReset,
+}: {
+  open: boolean;
+  params: TunerParams;
+  onChange: (next: TunerParams) => void;
+  onToggle: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="tuner" aria-label="大技パラメータ調整">
+      {open && (
+        <div className="tuner-body">
+          <div className="tuner-title">大技 調整 <span>（大技POC中に反映）</span></div>
+          {TUNER_FIELDS.map((field) => (
+            <label className="tuner-row" key={field.key}>
+              <span className="tuner-name">{field.label}</span>
+              <input
+                type="range"
+                min={field.min}
+                max={field.max}
+                step={field.step}
+                value={params[field.key]}
+                onChange={(event) => onChange({ ...params, [field.key]: Number(event.target.value) })}
+              />
+              <span className="tuner-value">{formatTunerValue(params[field.key], field.step)}</span>
+            </label>
+          ))}
+          <button className="tuner-reset" onClick={onReset} type="button">
+            リセット
+          </button>
+        </div>
+      )}
+      <button className="tuner-toggle" onClick={onToggle} type="button">
+        {open ? '× 調整パネル' : '⚙ 調整'}
+      </button>
+    </div>
+  );
+}
+
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('auto');
   const [battleMode, setBattleMode] = useState<BattleMode>(() => {
     const battle = new URLSearchParams(window.location.search).get('battle');
-    return battle === 'slash' || battle === 'thrust' ? battle : 'idle';
+    return battle === 'slash' || battle === 'thrust' || battle === 'special' ? battle : 'idle';
   });
   const [stageId, setStageId] = useState<StageId>(() => {
     const stage = new URLSearchParams(window.location.search).get('stage');
     return stage === 'sanctum' || stage === 'highland' ? stage : 'dungeon';
   });
+  const [tunerParams, setTunerParams] = useState<TunerParams>(DEFAULT_TUNER);
+  const [tunerOpen, setTunerOpen] = useState(false);
+  const tunerParamsRef = useRef<TunerParams>(tunerParams);
+  // keep the ref in sync so the running animation loop reads live values without
+  // tearing down and rebuilding the scene on every slider tick.
+  tunerParamsRef.current = tunerParams;
 
   return (
     <>
-      <DungeonScene viewMode={viewMode} battleMode={battleMode} stageId={stageId} />
+      <DungeonScene viewMode={viewMode} battleMode={battleMode} stageId={stageId} paramsRef={tunerParamsRef} />
       <div className="battle-switch" aria-label="戦闘演出切替">
         {([
           ['idle', '待機'],
           ['slash', '斬撃POC'],
           ['thrust', '突きPOC'],
+          ['special', '大技POC'],
         ] as const).map(([mode, label]) => (
           <button
             className={battleMode === mode ? 'active' : ''}
@@ -2223,6 +2638,13 @@ function App() {
           </button>
         ))}
       </div>
+      <TunerPanel
+        open={tunerOpen}
+        params={tunerParams}
+        onChange={setTunerParams}
+        onToggle={() => setTunerOpen((open) => !open)}
+        onReset={() => setTunerParams(DEFAULT_TUNER)}
+      />
     </>
   );
 }
