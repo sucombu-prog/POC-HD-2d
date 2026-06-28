@@ -31,6 +31,9 @@ type Vec3Tuple = [number, number, number];
 type TunerParams = {
   auraIntensity: number;
   auraLight: number;
+  charTint: number;
+  gradeTint: number;
+  floorStreak: number;
   frameFill: number;
   fovTele: number;
   fovWide: number;
@@ -42,6 +45,9 @@ type TunerParams = {
 const DEFAULT_TUNER: TunerParams = {
   auraIntensity: 1,
   auraLight: 4.5,
+  charTint: 0.6,
+  gradeTint: 0.5,
+  floorStreak: 0.8,
   frameFill: 0.66,
   fovTele: 22,
   fovWide: 58,
@@ -424,6 +430,9 @@ const colorGradeShader = {
     saturation: { value: 1.08 },
     warmth: { value: 0.006 },
     vignette: { value: 0.2 },
+    // Special-move colour wash: push the whole frame toward the aura hue.
+    tint: { value: new THREE.Color(1, 1, 1) },
+    tintAmount: { value: 0 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -439,6 +448,8 @@ const colorGradeShader = {
     uniform float saturation;
     uniform float warmth;
     uniform float vignette;
+    uniform vec3 tint;
+    uniform float tintAmount;
     varying vec2 vUv;
 
     void main() {
@@ -449,6 +460,10 @@ const colorGradeShader = {
       color = mix(vec3(grey), color, saturation);
       color.r += warmth;
       color.b -= warmth * 0.7;
+      // Aura colour wash: add tinted light scaled by local brightness so the
+      // lit areas (effect + bloom) take the hue while shadows stay clean.
+      float lum = dot(color, vec3(0.299, 0.587, 0.114));
+      color += tint * tintAmount * (0.25 + 0.75 * lum);
       float dist = distance(vUv, vec2(0.5));
       float vig = smoothstep(0.88, 0.2, dist);
       color *= mix(1.0 - vignette, 1.0, vig);
@@ -514,6 +529,34 @@ function makeGlowTexture(colorStops?: Array<[number, string]>) {
   stops.forEach(([offset, color]) => gradient.addColorStop(offset, color));
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(canvas);
+}
+
+// A soft elongated smear for the floor: a light "reflection streak" that runs
+// from the aura source toward the camera. Bright near the source (top), fading
+// toward the viewer (bottom), feathered across its width.
+function makeFloorStreakTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, 128, 512);
+  const vgrad = ctx.createLinearGradient(0, 0, 0, 512);
+  vgrad.addColorStop(0, 'rgba(255,255,255,0)');
+  vgrad.addColorStop(0.08, 'rgba(255,255,255,0.95)');
+  vgrad.addColorStop(0.5, 'rgba(255,255,255,0.42)');
+  vgrad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = vgrad;
+  ctx.fillRect(0, 0, 128, 512);
+  // feather the left/right edges so it reads as a soft band, not a hard bar
+  const hgrad = ctx.createLinearGradient(0, 0, 128, 0);
+  hgrad.addColorStop(0, 'rgba(0,0,0,1)');
+  hgrad.addColorStop(0.5, 'rgba(0,0,0,0)');
+  hgrad.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = hgrad;
+  ctx.fillRect(0, 0, 128, 512);
+  ctx.globalCompositeOperation = 'source-over';
   return new THREE.CanvasTexture(canvas);
 }
 
@@ -1447,6 +1490,11 @@ function DungeonScene({ viewMode, battleMode, stageId, paramsRef }: { viewMode: 
 
     // --- Special move (大技) aura rig ---
     const auraColor = isHighland ? 0xcdf7c2 : 0xffd089;
+    const auraColorObj = new THREE.Color(auraColor);
+    // Capture the sprites' base tints so the per-frame aura colouring can lerp
+    // away from them and self-restore as the flare fades.
+    const heroBaseColor = hero.material.color.clone();
+    const enemyBaseColor = enemy.material.color.clone();
     const auraTexture = makeAuraTexture();
     const heroAura = new THREE.Sprite(
       new THREE.SpriteMaterial({
@@ -1497,6 +1545,25 @@ function DungeonScene({ viewMode, battleMode, stageId, paramsRef }: { viewMode: 
     );
     auraRing.rotation.x = -Math.PI / 2;
     scene.add(auraRing);
+
+    // Floor reflection streak: a soft additive smear running from the hero's
+    // feet toward the camera, so the aura reads as light landing on the ground.
+    const floorStreakTexture = makeFloorStreakTexture();
+    const floorStreakLength = 7;
+    const floorStreak = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, floorStreakLength),
+      new THREE.MeshBasicMaterial({
+        map: floorStreakTexture,
+        color: auraColor,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    floorStreak.rotation.x = -Math.PI / 2;
+    floorStreak.renderOrder = -2; // sit on the floor, under the characters
+    scene.add(floorStreak);
 
     const auraEmberTexture = makeGlowTexture([
       [0, 'rgba(255, 255, 235, 1)'],
@@ -2060,12 +2127,18 @@ function DungeonScene({ viewMode, battleMode, stageId, paramsRef }: { viewMode: 
         bloomPass.radius = basePost.bloomRadius + auraFlare * 0.12;
         gradePass.uniforms.exposure.value = basePost.exposure + release * 0.2;
         gradePass.uniforms.saturation.value = basePost.saturation + release * 0.15;
+        // Whole-screen colour wash toward the aura hue.
+        gradePass.uniforms.tint.value.copy(auraColorObj);
+        gradePass.uniforms.tintAmount.value = auraFlare * p.gradeTint;
         chromaPass.uniforms.amount.value = chroma * p.chroma;
         chromaPass.uniforms.blur.value = chroma * p.chroma * 1.2;
         chromaPass.uniforms.center.value.set(0.5, 0.52);
       } else {
         chromaPass.uniforms.amount.value = 0;
         chromaPass.uniforms.blur.value = 0;
+        gradePass.uniforms.tintAmount.value = 0;
+        hero.material.color.copy(heroBaseColor);
+        enemy.material.color.copy(enemyBaseColor);
       }
 
       const heroCombatScale = isBattleActive && combatCycle < 0.9 ? 1.12 : 1;
@@ -2134,6 +2207,29 @@ function DungeonScene({ viewMode, battleMode, stageId, paramsRef }: { viewMode: 
       (auraCore.material as THREE.SpriteMaterial).opacity = Math.min(0.6, (aura * 0.07 + release * 0.3) * auraK);
       auraLight.position.set(hero.position.x, hero.position.y + 0.2, hero.position.z + 0.6);
       auraLight.intensity = auraFlare * p.auraLight;
+
+      // Aura lighting on the characters: tint each sprite toward the aura colour
+      // and brighten by distance to the source — near = strong/bright, far =
+      // weak/slightly dim. No normal maps; the directional read comes from bloom.
+      const tintRange = 7.5;
+      for (const [chara, baseColor] of [
+        [hero, heroBaseColor],
+        [enemy, enemyBaseColor],
+      ] as const) {
+        const d = chara.position.distanceTo(auraLight.position);
+        const near = Math.max(0, 1 - d / tintRange); // 1 at source -> 0 far
+        const amt = auraFlare * p.charTint;
+        chara.material.color
+          .copy(baseColor)
+          .lerp(auraColorObj, Math.min(1, amt * (0.4 + 0.6 * near)))
+          .multiplyScalar(1 + auraFlare * (near - 0.45) * 0.55 * p.charTint);
+      }
+
+      // Floor reflection streak from the hero's feet toward the camera.
+      floorStreak.position.set(hero.position.x, 0.04, layoutRig.heroZ + floorStreakLength / 2);
+      floorStreak.scale.set(1 + release * 0.25, 1 + release * 0.3, 1);
+      (floorStreak.material as THREE.MeshBasicMaterial).opacity = Math.min(0.9, auraFlare * 0.7 * p.floorStreak);
+
       auraRing.position.set(hero.position.x, 0.05, layoutRig.heroZ + 0.18);
       auraRing.scale.setScalar((0.95 + easeOutCubic(aura) * 0.5 + release * 0.3) * layoutRig.heroScale);
       (auraRing.material as THREE.MeshBasicMaterial).opacity = (aura * 0.3 + release * 0.18) * auraK;
@@ -2520,6 +2616,9 @@ function DungeonScene({ viewMode, battleMode, stageId, paramsRef }: { viewMode: 
 const TUNER_FIELDS: Array<{ key: keyof TunerParams; label: string; min: number; max: number; step: number }> = [
   { key: 'auraIntensity', label: 'オーラ強度', min: 0, max: 2, step: 0.05 },
   { key: 'auraLight', label: 'オーラ光量', min: 0, max: 10, step: 0.1 },
+  { key: 'charTint', label: 'キャラ着色', min: 0, max: 1.5, step: 0.05 },
+  { key: 'gradeTint', label: '全体着色', min: 0, max: 1.2, step: 0.05 },
+  { key: 'floorStreak', label: '床の光', min: 0, max: 1.5, step: 0.05 },
   { key: 'frameFill', label: 'ズーム量', min: 0.4, max: 0.9, step: 0.01 },
   { key: 'fovTele', label: '望遠FOV', min: 12, max: 45, step: 1 },
   { key: 'fovWide', label: '広角FOV', min: 40, max: 80, step: 1 },
